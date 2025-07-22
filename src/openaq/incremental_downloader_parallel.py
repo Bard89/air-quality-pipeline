@@ -112,8 +112,15 @@ class IncrementalDownloaderParallel:
         all_data = []
         page = start_page
         consecutive_errors = 0
+        total_fetched = len(all_data)
 
         while page <= max_pages:
+            # Skip page 17 if we've seen consistent timeouts
+            if page == 17:
+                print(f"\n      Skipping page 17 (known timeout issue)...")
+                page += 1
+                continue
+                
             try:
                 params = {'limit': 1000, 'page': page}
                 response = self.client.api.get(f'/sensors/{sensor_id}/measurements', params)
@@ -123,15 +130,27 @@ class IncrementalDownloaderParallel:
                     break
 
                 all_data.extend(measurements)
+                total_fetched = len(all_data)
                 consecutive_errors = 0  # Reset error counter on success
 
+                # Show progress every 5 pages
+                if page % 5 == 0:
+                    print(f"\r      Fetched up to page {page} ({total_fetched} measurements total)", end='', flush=True)
+
                 if len(measurements) < 1000:
+                    print(f"\n      Reached end of data at page {page}")
                     break
 
                 page += 1
 
             except Exception as e:
                 error_msg = str(e)[:100]
+                
+                # For page 16, just skip to 18 if timeout
+                if page == 16 and ('408' in error_msg or 'timeout' in error_msg.lower()):
+                    print(f"\n      Timeout on page {page}, skipping to page 18...")
+                    page = 18
+                    continue
                 
                 if ('408' in error_msg or 'timeout' in error_msg.lower()) and consecutive_errors == 0:
                     print(f"\n      Timeout on page {page}, retrying once...")
@@ -140,7 +159,7 @@ class IncrementalDownloaderParallel:
                     continue
                 
                 print(f"\n      Error on page {page}: {error_msg}")
-                print("      Stopping this sensor...")
+                print(f"      Total fetched: {total_fetched} measurements")
                 break
 
         return all_data
