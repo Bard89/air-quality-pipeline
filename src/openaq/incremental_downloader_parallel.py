@@ -12,8 +12,9 @@ class IncrementalDownloaderParallel:
 
     def __init__(self, client: OpenAQClient):
         self.client = client
-        self.checkpoint_file = Path('data/openaq/checkpoints/download_progress.json')
-        self.checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
+        self.checkpoint_dir = Path('data/openaq/checkpoints')
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        self.checkpoint_file = None  # Will be set based on country and timestamp
 
         # Check if we have parallel client
         self.is_parallel = isinstance(getattr(client.api, '__class__', None).__name__, str) and \
@@ -44,7 +45,7 @@ class IncrementalDownloaderParallel:
             json.dump(checkpoint, f, indent=2)
 
     def load_checkpoint(self):
-        if self.checkpoint_file.exists():
+        if self.checkpoint_file and self.checkpoint_file.exists():
             with open(self.checkpoint_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         return None
@@ -226,6 +227,11 @@ class IncrementalDownloaderParallel:
         checkpoint = None
         completed_locations = []
         start_index = 0
+        
+        # Generate unique checkpoint filename based on country, parameters, and parallel mode
+        param_str = '_'.join(parameters) if parameters else 'all'
+        checkpoint_filename = f"checkpoint_{country_code.lower()}_{param_str}_parallel.json"
+        self.checkpoint_file = self.checkpoint_dir / checkpoint_filename
 
         if resume and self.checkpoint_file.exists():
             checkpoint = self.load_checkpoint()
