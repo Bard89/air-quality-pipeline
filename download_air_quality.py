@@ -105,12 +105,10 @@ Examples:
     if not args.country:
         parser.error("--country is required")
 
-    # Initialize date variables
     start_date = None
     end_date = None
     
     if args.country_wide:
-        # Country-wide mode doesn't use dates
         pass
     elif args.days:
         end_date = datetime.now(timezone.utc)
@@ -171,7 +169,7 @@ Examples:
         param_list = [p.strip().lower() for p in args.parameters.split(',')]
         all_sensors = [s for s in all_sensors if s['parameter'] in param_list]
 
-    if start_date:  # Only find active sensors if we have a date range
+    if start_date:
         if args.parameters:
             active_sensors = []
             param_list = [p.strip().lower() for p in args.parameters.split(',')]
