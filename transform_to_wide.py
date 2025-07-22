@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-import pandas as pd
 import sys
 from pathlib import Path
 
+import pandas as pd
 
-def transform_to_wide(input_csv):
+
+def transform_to_wide(input_csv: str) -> str:
     print(f"Reading {input_csv}...")
     df = pd.read_csv(input_csv, parse_dates=['datetime'])
     
@@ -35,7 +36,8 @@ def transform_to_wide(input_csv):
     
     wide.sort_values(['location_id', 'datetime'], inplace=True)
     
-    output_csv = input_csv.replace('.csv', '_wide.csv')
+    output_path = Path(input_csv)
+    output_csv = str(output_path.parent / f"{output_path.stem}_wide.csv")
     wide.to_csv(output_csv, index=False)
     
     print(f"\nOutput shape: {len(wide)} rows x {len(wide.columns)} columns")

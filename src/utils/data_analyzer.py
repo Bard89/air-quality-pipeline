@@ -1,8 +1,9 @@
-import pandas as pd
-import numpy as np
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
-from datetime import datetime
+
+import numpy as np
+import pandas as pd
 
 
 class DataAnalyzer:
@@ -135,40 +136,50 @@ class DataAnalyzer:
         params = self.get_parameter_stats()
         spatial = self.get_spatial_distribution()
         
-        report = f"""
-=== Air Quality Data Analysis Report ===
-File: {basic['file_name']}
-
-OVERVIEW:
-- Total measurements: {basic['total_measurements']:,}
-- Date range: {basic['date_range']['days']} days ({basic['date_range']['start'][:10]} to {basic['date_range']['end'][:10]})
-- Unique sensors: {basic['unique_sensors']}
-- Unique locations: {basic['unique_locations']}
-- Parameters measured: {basic['unique_parameters']} ({', '.join(params.keys())})
-
-SPATIAL DISTRIBUTION:
-- Sensors span: {spatial.get('area_span_km', {}).get('north_south', 0):.1f} km N-S, {spatial.get('area_span_km', {}).get('east_west', 0):.1f} km E-W
-- Bounding box: ({spatial.get('bounding_box', {}).get('south', 0):.4f}, {spatial.get('bounding_box', {}).get('west', 0):.4f}) to ({spatial.get('bounding_box', {}).get('north', 0):.4f}, {spatial.get('bounding_box', {}).get('east', 0):.4f})
-
-SENSOR DETAILS:
-"""
+        header = f"=== Air Quality Data Analysis Report ===\nFile: {basic['file_name']}\n"
+        
+        overview = (
+            f"\nOVERVIEW:\n"
+            f"- Total measurements: {basic['total_measurements']:,}\n"
+            f"- Date range: {basic['date_range']['days']} days ({basic['date_range']['start'][:10]} to {basic['date_range']['end'][:10]})\n"
+            f"- Unique sensors: {basic['unique_sensors']}\n"
+            f"- Unique locations: {basic['unique_locations']}\n"
+            f"- Parameters measured: {basic['unique_parameters']} ({', '.join(params.keys())})\n"
+        )
+        
+        spatial_info = (
+            f"\nSPATIAL DISTRIBUTION:\n"
+            f"- Sensors span: {spatial.get('area_span_km', {}).get('north_south', 0):.1f} km N-S, "
+            f"{spatial.get('area_span_km', {}).get('east_west', 0):.1f} km E-W\n"
+            f"- Bounding box: ({spatial.get('bounding_box', {}).get('south', 0):.4f}, "
+            f"{spatial.get('bounding_box', {}).get('west', 0):.4f}) to "
+            f"({spatial.get('bounding_box', {}).get('north', 0):.4f}, "
+            f"{spatial.get('bounding_box', {}).get('east', 0):.4f})\n"
+        )
+        
+        sensor_details = "\nSENSOR DETAILS:"
         for i, sensor in enumerate(sensors[:10], 1):
-            report += f"\n{i}. {sensor['location']} (ID: {sensor['sensor_id']})"
-            report += f"\n   Location: {sensor['coordinates'][0]:.4f}, {sensor['coordinates'][1]:.4f}"
-            report += f"\n   Measurements: {sensor['measurements']:,}"
-            report += f"\n   Parameters: {', '.join(sensor['parameters'])}"
+            sensor_details += (
+                f"\n\n{i}. {sensor['location']} (ID: {sensor['sensor_id']})\n"
+                f"   Location: {sensor['coordinates'][0]:.4f}, {sensor['coordinates'][1]:.4f}\n"
+                f"   Measurements: {sensor['measurements']:,}\n"
+                f"   Parameters: {', '.join(sensor['parameters'])}"
+            )
         
         if len(sensors) > 10:
-            report += f"\n   ... and {len(sensors) - 10} more sensors"
+            sensor_details += f"\n   ... and {len(sensors) - 10} more sensors"
         
-        report += "\n\nPARAMETER STATISTICS:"
+        param_stats = "\n\nPARAMETER STATISTICS:"
         for param, stats in params.items():
-            report += f"\n\n{param.upper()}:"
-            report += f"\n- Mean: {stats['mean']} ± {stats['std']} µg/m³"
-            report += f"\n- Range: {stats['min']} - {stats['max']} µg/m³"
-            report += f"\n- Percentiles: 25%={stats['percentiles']['25%']}, 50%={stats['percentiles']['50%']}, 75%={stats['percentiles']['75%']}, 95%={stats['percentiles']['95%']}"
+            param_stats += (
+                f"\n\n{param.upper()}:\n"
+                f"- Mean: {stats['mean']} ± {stats['std']} µg/m³\n"
+                f"- Range: {stats['min']} - {stats['max']} µg/m³\n"
+                f"- Percentiles: 25%={stats['percentiles']['25%']}, 50%={stats['percentiles']['50%']}, "
+                f"75%={stats['percentiles']['75%']}, 95%={stats['percentiles']['95%']}"
+            )
         
-        return report
+        return header + overview + spatial_info + sensor_details + param_stats
 
 
 def analyze_dataset(csv_path: str):
@@ -184,11 +195,3 @@ def analyze_dataset(csv_path: str):
         print("\nSensors with <50% coverage:")
         for sid, pct in low_coverage[:5]:
             print(f"  - Sensor {sid}: {pct}%")
-
-
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1:
-        analyze_dataset(sys.argv[1])
-    else:
-        analyze_dataset('data/openaq/processed/vietnam_sensors_june_2024.csv')

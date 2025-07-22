@@ -249,12 +249,8 @@ The tool downloads ALL available historical data from each sensor because the Op
 
 **Speed improvements with multiple API keys:**
 - 1 key: Standard speed (60 req/min)
-- 2 keys: 2x faster (120 req/min, 0.5s delay)
-- 3 keys: 3x faster (180 req/min, 0.33s delay)
 - 5 keys: 5x faster (300 req/min, 0.2s delay)
 - 10 keys: 10x faster (600 req/min, 0.1s delay)
-- 20 keys: 20x faster (1,200 req/min, 0.05s delay)
-- 50 keys: 50x faster (3,000 req/min, 0.02s delay)
 - 100 keys: 100x faster (6,000 req/min, 0.01s delay)
 
 ## License
