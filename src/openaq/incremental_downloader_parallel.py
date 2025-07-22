@@ -61,7 +61,7 @@ class IncrementalDownloaderParallel:
 
         # Build list of all requests
         for sensor_id in sensor_ids:
-            for page in range(1, min(6, max_pages_per_sensor + 1)):  # First 5 pages per sensor
+            for page in range(1, min(3, max_pages_per_sensor + 1)):  # First 2 pages per sensor to avoid timeouts
                 endpoint = f'/sensors/{sensor_id}/measurements'
                 params = {'limit': 1000, 'page': page}
                 request_index = len(all_requests)
@@ -90,10 +90,11 @@ class IncrementalDownloaderParallel:
 
         return sensor_data
 
-    def fetch_remaining_sensor_data(self, sensor_id: int, start_page: int = 6, max_pages: int = 100) -> List[Dict]:
+    def fetch_remaining_sensor_data(self, sensor_id: int, start_page: int = 3, max_pages: int = 100) -> List[Dict]:
         """Fetch remaining pages for a sensor (sequential)"""
         all_data = []
         page = start_page
+        consecutive_errors = 0
 
         while page <= max_pages:
             try:
@@ -105,6 +106,7 @@ class IncrementalDownloaderParallel:
                     break
 
                 all_data.extend(measurements)
+                consecutive_errors = 0  # Reset error counter on success
 
                 if len(measurements) < 1000:
                     break
@@ -112,8 +114,19 @@ class IncrementalDownloaderParallel:
                 page += 1
 
             except Exception as e:
-                print(f"\n      Error on page {page}: {str(e)[:50]}")
-                break
+                consecutive_errors += 1
+                error_msg = str(e)[:100]
+                
+                if '408' in error_msg or 'timeout' in error_msg.lower():
+                    print(f"\n      Timeout on page {page}, retrying...")
+                    if consecutive_errors < 3:
+                        time.sleep(2)  # Brief pause before retry
+                        continue
+                
+                print(f"\n      Error on page {page}: {error_msg}")
+                if consecutive_errors >= 3:
+                    print("      Too many consecutive errors, stopping...")
+                    break
 
         return all_data
 
@@ -151,10 +164,10 @@ class IncrementalDownloaderParallel:
             param_name = sensor_info.get(sensor_id, 'unknown')
 
             # Check if we need more pages
-            if len(measurements) >= 5000:  # Got full 5 pages
+            if len(measurements) >= 2000:  # Got full 2 pages
                 print(f"    Sensor {sensor_id} ({param_name}): {len(measurements)}+ measurements...")
                 # Fetch remaining pages sequentially
-                additional_data = self.fetch_remaining_sensor_data(sensor_id, start_page=6)
+                additional_data = self.fetch_remaining_sensor_data(sensor_id, start_page=3)
                 measurements.extend(additional_data)
 
             if measurements:
@@ -285,7 +298,7 @@ class IncrementalDownloaderParallel:
                                    str(output_path), loc_id)
 
                 # Process location
-                if self.is_parallel and sensor_count > 5:
+                if self.is_parallel and sensor_count > 3:
                     # Use parallel processing for locations with many sensors
                     loc_measurements = self.process_location_parallel(
                         location, output_path, parameters
