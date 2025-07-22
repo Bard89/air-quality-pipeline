@@ -96,8 +96,17 @@ class ParallelAPIClient:
         async with aiohttp.ClientSession(connector=connector) as session:
             # Create tasks for all requests
             tasks = []
+            # Use random key assignment to better distribute load
+            import random
+            available_keys = list(range(self.num_keys))
+            
             for i, (endpoint, params) in enumerate(requests):
-                key_index = i % self.num_keys  # Distribute across keys
+                # For small batches, ensure we use different keys
+                if len(requests) < self.num_keys:
+                    key_index = available_keys[i % len(available_keys)]
+                else:
+                    # For larger batches, distribute evenly
+                    key_index = i % self.num_keys
                 task = self._get_with_key(session, key_index, endpoint, params)
                 tasks.append(task)
 
