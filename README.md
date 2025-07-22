@@ -40,12 +40,6 @@ pip install -r requirements.txt
 # Limit sensors for faster downloads
 ./download_air_quality.py --country TH --days 7 --parameters pm25 --limit-sensors 10
 
-# Smart mode: Auto-select best locations (minimal API requests)
-./download_air_quality.py --country IN --days 30 --parameters pm25 --smart
-
-# Download full year efficiently with smart mode
-./download_air_quality.py --country CN --start 2024-01-01 --end 2024-12-31 --smart
-
 # Download entire country data efficiently
 ./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 --country-wide --max-locations 100
 
@@ -62,7 +56,6 @@ pip install -r requirements.txt
 - `--parameters, -p`: Comma-separated parameters (see available parameters below)
 - `--limit-sensors, -l`: Limit sensors per parameter
 - `--analyze, -a`: Auto-analyze after download (default: true)
-- `--smart`: Smart mode - auto-selects best locations for data quality and minimal API usage
 - `--country-wide`: Download all data from a country efficiently (best for large datasets)
 - `--max-locations`: Limit number of locations (use with --country-wide)
 
@@ -215,24 +208,21 @@ Use `--country-wide` to download all data from a country efficiently:
 # Output: "Resuming from checkpoint (location 150/500)"
 ```
 
-#### Smart Mode (Best for Quick Analysis)
-The `--smart` flag auto-selects best locations for data quality
-
 **API Request Comparison:**
 | Mode | Scope | API Requests | Time |
 |------|-------|--------------|------|
 | Standard | 500 locations, 1 year | ~24,000 | 10+ hours |
-| Country-wide | 100 locations, 1 year | ~400 | ~10 minutes |
-| Smart | 20 locations, 1 year | ~100 | ~3 minutes |
+| Country-wide | 100 locations, 1 year | ~5,000 | ~90 minutes |
+| Country-wide | 50 locations, 1 year | ~2,500 | ~45 minutes |
 
 ### Tips for Minimal API Usage
 
 ```bash
-# For large datasets, always use --smart
-./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 --smart
+# For large datasets, always use --country-wide
+./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 --country-wide
 
 # Combine with parameter filtering
-./download_air_quality.py --country CN --days 365 --parameters pm25,pm10 --smart
+./download_air_quality.py --country CN --days 365 --parameters pm25,pm10 --country-wide --max-locations 100
 
 # For testing, limit sensors
 ./download_air_quality.py --country US --days 7 --limit-sensors 5
@@ -240,9 +230,9 @@ The `--smart` flag auto-selects best locations for data quality
 
 ### General Performance
 
-- Rate limited to 60 requests/minute
-- Smart mode typically completes in minutes instead of hours
+- Rate limited to 60 requests/minute (1.05s delay between requests)
 - Shows time estimates before downloading
+- Data saved incrementally (safe from interruptions)
 
 ## License
 

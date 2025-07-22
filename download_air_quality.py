@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from src.openaq.client import OpenAQClient
 from src.openaq.location_finder import LocationFinder
 from src.openaq.data_downloader import DataDownloader
-from src.openaq.smart_selector import SmartLocationSelector
 from src.openaq.incremental_downloader import IncrementalDownloader
 from src.core.data_storage import DataStorage
 from src.utils.data_analyzer import analyze_dataset
@@ -58,8 +57,6 @@ Examples:
                        help='List available countries and exit')
     parser.add_argument('--analyze', '-a', action='store_true', default=True,
                        help='Analyze data after download (default: True)')
-    parser.add_argument('--smart', action='store_true',
-                       help='Smart mode: auto-select best locations for data quality')
     parser.add_argument('--country-wide', action='store_true',
                        help='Download ALL data from country (day-by-day, most efficient for full country)')
     parser.add_argument('--max-locations', type=int,
@@ -141,31 +138,6 @@ Examples:
     )
     print(f"Found {len(locations)} locations")
     
-    # Smart mode: select best locations
-    if args.smart:
-        selector = SmartLocationSelector(client)
-        target_locations = min(20, len(locations))
-        
-        if args.parameters:
-            param_list = [p.strip().lower() for p in args.parameters.split(',')]
-        else:
-            param_list = None
-            
-        locations = selector.select_best_locations(
-            locations, 
-            target_count=target_locations,
-            parameters=param_list,
-            min_date=start_date.strftime('%Y-%m-%d')
-        )
-        
-        # Show estimation
-        estimate = selector.estimate_data_volume(locations, start_date, end_date)
-        print(f"\nData volume estimation:")
-        print(f"- Locations: {estimate['locations']}")
-        print(f"- Total sensors: {estimate['total_sensors']}")
-        print(f"- API requests: ~{estimate['estimated_requests_batch']:,} (batch mode)")
-        print(f"- Time estimate: ~{estimate['estimated_time_batch_minutes']:.0f} minutes")
-    
     # Extract all sensors
     all_sensors = []
     for location in locations:
@@ -221,48 +193,30 @@ Examples:
         active_sensors = limited_sensors
         print(f"\nLimited to {len(active_sensors)} sensors")
     
-    # Check if we can use batch download
-    unique_locations = set(s['location_id'] for s in active_sensors)
-    sensors_per_location = len(active_sensors) / len(unique_locations)
+    # Warn about large downloads
+    days = (end_date - start_date).days
+    estimated_requests = len(active_sensors) * ((days + 89) // 90)  # 90-day chunks
+    estimated_time = estimated_requests * 1.05 / 60  # 1.05s per request
     
-    # Use batch download if we have many sensors from the same locations
-    use_batch = sensors_per_location > 2 and len(unique_locations) < 100
+    if estimated_time > 60:
+        print(f"\n⚠️  WARNING: This download will make ~{estimated_requests:,} API requests")
+        print(f"Estimated time: {estimated_time:.0f} minutes")
+        print("\nConsider using filters to reduce data:")
+        print("  --parameters pm25,pm10  # Download only specific pollutants")
+        print("  --limit-sensors 10      # Limit sensors per parameter")
+        print("  --days 30               # Download recent data only")
+        print("  --country-wide          # Use incremental mode for full country")
+        
+        response = input("\nContinue? (y/N): ")
+        if response.lower() != 'y':
+            print("Download cancelled.")
+            sys.exit(0)
     
-    if use_batch:
-        print(f"\nUsing optimized batch download for {len(unique_locations)} locations")
-        # Extract parameters if specified
-        params = None
-        if args.parameters:
-            params = [p.strip().lower() for p in args.parameters.split(',')]
-        
-        downloader = DataDownloader(client)
-        df = downloader.download_batch_measurements(
-            list(unique_locations), start_date, end_date, params
-        )
-    else:
-        # Warn about large downloads
-        days = (end_date - start_date).days
-        estimated_requests = len(active_sensors) * ((days + 89) // 90)  # 90-day chunks
-        estimated_time = estimated_requests * 1.5 / 60  # 1.5s per request
-        
-        if estimated_time > 60:
-            print(f"\n⚠️  WARNING: This download will make ~{estimated_requests:,} API requests")
-            print(f"Estimated time: {estimated_time:.0f} minutes")
-            print("\nConsider using filters to reduce data:")
-            print("  --parameters pm25,pm10  # Download only specific pollutants")
-            print("  --limit-sensors 10      # Limit sensors per parameter")
-            print("  --days 30               # Download recent data only")
-            
-            response = input("\nContinue? (y/N): ")
-            if response.lower() != 'y':
-                print("Download cancelled.")
-                sys.exit(0)
-        
-        # Download data
-        downloader = DataDownloader(client)
-        print(f"\nStarting download from {len(active_sensors)} sensors...")
-        
-        df = downloader.download_multiple_sensors(active_sensors, start_date, end_date)
+    # Download data
+    downloader = DataDownloader(client)
+    print(f"\nStarting download from {len(active_sensors)} sensors...")
+    
+    df = downloader.download_multiple_sensors(active_sensors, start_date, end_date)
     
     if df.empty:
         print("No data downloaded!")
