@@ -8,15 +8,13 @@ import pandas as pd
 
 from src.openaq.client import OpenAQClient
 class IncrementalDownloaderParallel:
-    """Downloads data using parallel API calls for maximum speed"""
 
     def __init__(self, client: OpenAQClient):
         self.client = client
         self.checkpoint_dir = Path('data/openaq/checkpoints')
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        self.checkpoint_file = None  # Will be set based on country and timestamp
+        self.checkpoint_file = None
 
-        # Check if we have parallel client
         self.is_parallel = isinstance(getattr(client.api, '__class__', None).__name__, str) and \
                           'Parallel' in client.api.__class__.__name__
 
@@ -25,7 +23,6 @@ class IncrementalDownloaderParallel:
             print(f"Parallel API client detected with {getattr(client.api, 'num_keys', 'unknown')} keys")
 
     def _get_sequential_downloader(self):
-        """Get sequential downloader instance"""
         from src.openaq.incremental_downloader_all import IncrementalDownloaderAll
         return IncrementalDownloaderAll(self.client)
 
@@ -57,13 +54,9 @@ class IncrementalDownloaderParallel:
             df.to_csv(output_path, index=False)
 
     def fetch_sensor_pages_parallel_sync(self, sensor_ids: List[int], max_pages_per_sensor: int = 100) -> Dict[int, List]:
-        """Fetch data from multiple sensors in parallel"""
         all_requests = []
-        request_map = {}  # Map request index to (sensor_id, page)
-
-        # Build list of all requests
+        request_map = {}
         for sensor_id in sensor_ids:
-            # Fetch more pages if we have many API keys to utilize them better
             pages_to_fetch = min(6, max(3, self.client.api.num_keys // len(sensor_ids))) if hasattr(self.client.api, 'num_keys') else 3
             for page in range(1, min(pages_to_fetch + 1, max_pages_per_sensor + 1)):
                 endpoint = f'/sensors/{sensor_id}/measurements'
@@ -76,10 +69,8 @@ class IncrementalDownloaderParallel:
         print(f"      Fetching {len(all_requests)} pages in parallel ({pages_per_sensor} pages × {len(sensor_ids)} sensors)")
         print(f"      Using {getattr(self.client.api, 'num_keys', 1)} API keys concurrently")
 
-        # Execute all requests in parallel
         if hasattr(self.client.api, 'get_batch'):
             results = self.client.api.get_batch(all_requests)
-            # Track key usage in order
             key_sequence = []
             key_usage = {}
             for i, result in enumerate(results):
@@ -91,18 +82,15 @@ class IncrementalDownloaderParallel:
                 print(f"      API keys actually used (first 10): {key_sequence[:10]}{'...' if len(key_sequence) > 10 else ''}")
                 print(f"      Key distribution: {len(key_usage)} unique keys, each used {list(key_usage.values())[:5]}... times")
         else:
-            # Fallback to sequential if not parallel client
             results = []
             for endpoint, params in all_requests:
                 results.append(self.client.api.get(endpoint, params))
 
-        # Organize results by sensor
         sensor_data = {sensor_id: [] for sensor_id in sensor_ids}
 
         for i, result in enumerate(results):
             if 'error' not in result:
                 sensor_id, page = request_map[i]
-                # Remove tracking info before processing
                 if '_api_key_index' in result:
                     del result['_api_key_index']
                 if '_api_key_display' in result:
@@ -113,7 +101,6 @@ class IncrementalDownloaderParallel:
         return sensor_data
 
     def fetch_remaining_sensor_data(self, sensor_id: int, start_page: int = 3, max_pages: int = 100) -> List[Dict]:
-        """Fetch remaining pages for a sensor (sequential)"""
         all_data = []
         page = start_page
         consecutive_errors = 0
@@ -136,9 +123,8 @@ class IncrementalDownloaderParallel:
 
                 all_data.extend(measurements)
                 total_fetched = len(all_data)
-                consecutive_errors = 0  # Reset error counter on success
+                consecutive_errors = 0
 
-                # Show progress every 5 pages
                 if page % 5 == 0:
                     print(f"\r      Fetched up to page {page} ({total_fetched} measurements total)", end='', flush=True)
 
@@ -160,7 +146,7 @@ class IncrementalDownloaderParallel:
                 if ('408' in error_msg or 'timeout' in error_msg.lower()) and consecutive_errors == 0:
                     print(f"\n      Timeout on page {page}, retrying once...")
                     consecutive_errors += 1
-                    time.sleep(1)  # Brief pause before retry
+                    time.sleep(1)
                     continue
                 
                 print(f"\n      Error on page {page}: {error_msg}")
@@ -171,7 +157,6 @@ class IncrementalDownloaderParallel:
 
     def process_location_parallel(self, location: Dict, output_path: Path,
                                 parameters: Optional[List[str]] = None) -> int:
-        """Process all sensors at a location using parallel requests"""
         location_id = location['id']
         location_name = location.get('name', 'Unknown')
         coords = location.get('coordinates', {})
@@ -179,7 +164,6 @@ class IncrementalDownloaderParallel:
         country_code = location.get('country', {}).get('code')
         total_measurements = 0
 
-        # Filter sensors by parameter
         sensors = []
         sensor_info = {}
         for sensor in location.get('sensors', []):
@@ -195,23 +179,17 @@ class IncrementalDownloaderParallel:
 
         print(f"  Processing {len(sensors)} sensors in parallel...")
 
-        # Fetch first few pages from all sensors in parallel using sync wrapper
         sensor_data = self.fetch_sensor_pages_parallel_sync(sensors)
-
-        # Process each sensor's data
         for sensor_id, measurements in sensor_data.items():
             param_name = sensor_info.get(sensor_id, 'unknown')
 
-            # Check if we need more pages
             pages_fetched = len(measurements) // 1000
-            if pages_fetched > 0 and len(measurements) % 1000 == 0:  # Got full pages
+            if pages_fetched > 0 and len(measurements) % 1000 == 0:
                 print(f"    Sensor {sensor_id} ({param_name}): {len(measurements)}+ measurements...")
-                # Fetch remaining pages sequentially
                 additional_data = self.fetch_remaining_sensor_data(sensor_id, start_page=pages_fetched + 1)
                 measurements.extend(additional_data)
 
             if measurements:
-                # Convert to DataFrame format
                 sensor_df_data = []
                 for m in measurements:
                     period = m.get('period', {})
@@ -250,13 +228,11 @@ class IncrementalDownloaderParallel:
                            parameters: Optional[List[str]] = None,
                            max_locations: Optional[int] = None,
                            resume: bool = True) -> str:
-        """Download ALL data from country using parallel requests where possible"""
 
         checkpoint = None
         completed_locations = []
         start_index = 0
         
-        # Generate unique checkpoint filename based on country, parameters, and parallel mode
         param_str = '_'.join(parameters) if parameters else 'all'
         checkpoint_filename = f"checkpoint_{country_code.lower()}_{param_str}_parallel.json"
         self.checkpoint_file = self.checkpoint_dir / checkpoint_filename
@@ -303,10 +279,8 @@ class IncrementalDownloaderParallel:
 
         print(f"Found {len(all_locations)} locations")
 
-        # Get active locations (those not already completed)
         active_locations = [loc for loc in all_locations if loc['id'] not in completed_locations]
 
-        # Sort by number of sensors (download larger locations first)
         active_locations.sort(key=lambda x: len(x.get('sensors', [])), reverse=True)
 
         if max_locations and len(active_locations) > max_locations:
@@ -338,18 +312,14 @@ class IncrementalDownloaderParallel:
             location_start = time.time()
 
             try:
-                # Save checkpoint before processing
                 self.save_checkpoint(country_code, i, total_locations, completed_locations,
                                    str(output_path), loc_id)
 
-                # Process location
                 if self.is_parallel and sensor_count > 3:
-                    # Use parallel processing for locations with many sensors
                     loc_measurements = self.process_location_parallel(
                         location, output_path, parameters
                     )
                 else:
-                    # Fall back to sequential for small locations
                     sequential_downloader = self._get_sequential_downloader()
                     loc_measurements = sequential_downloader.download_location_sensors_all(
                         location, output_path, parameters

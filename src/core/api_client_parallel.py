@@ -5,20 +5,16 @@ import time
 
 import aiohttp
 class ParallelAPIClient:
-    """Parallel API client that uses multiple keys concurrently for maximum speed"""
-
     def __init__(self, base_url: str, api_keys: List[str], requests_per_minute_per_key: int = 60):
         self.base_url = base_url
         self.api_keys = api_keys
         self.num_keys = len(api_keys)
-        self.rate_limit_backoff = 5  # Configurable backoff time
+        self.rate_limit_backoff = 5
 
-        # Rate limiting per key
         self.request_delay = 60.0 / requests_per_minute_per_key
         self.last_request_times = defaultdict(float)
         self.key_locks = {i: asyncio.Lock() for i in range(self.num_keys)}
 
-        # Statistics
         self.request_counts = defaultdict(int)
         self.total_requests = 0
         self.error_counts = defaultdict(int)
@@ -29,9 +25,7 @@ class ParallelAPIClient:
 
     async def _get_with_key(self, session: aiohttp.ClientSession, key_index: int,
                            endpoint: str, params: Optional[Dict] = None, retry_attempt: int = 0) -> Tuple[Dict, int]:
-        """Make a request with a specific API key"""
         async with self.key_locks[key_index]:
-            # Rate limiting for this specific key
             current_time = time.time()
             time_since_last = current_time - self.last_request_times[key_index]
             if time_since_last < self.request_delay:
@@ -47,9 +41,9 @@ class ParallelAPIClient:
                     self.request_counts[key_index] += 1
                     self.total_requests += 1
 
-                    if response.status == 429:  # Rate limit
+                    if response.status == 429:
                         self.error_counts[key_index] += 1
-                        await asyncio.sleep(self.rate_limit_backoff)  # Back off
+                        await asyncio.sleep(self.rate_limit_backoff)
                         raise aiohttp.ClientResponseError(
                             request_info=response.request_info,
                             history=response.history,
@@ -59,17 +53,14 @@ class ParallelAPIClient:
 
                     response.raise_for_status()
                     data = await response.json()
-                    # Add key info to response for tracking
                     if isinstance(data, dict):
                         data['_api_key_index'] = key_index
-                        data['_api_key_display'] = key_index + 1  # For display (1-based)
+                        data['_api_key_display'] = key_index + 1
                     return data, key_index
 
             except asyncio.TimeoutError:
                 self.error_counts[key_index] += 1
-                # If this is the first attempt and we have more keys, try with a different key
                 if retry_attempt == 0 and self.num_keys > 1:
-                    # Find a different key to retry with
                     next_key_index = (key_index + 1) % self.num_keys
                     print(f"      Timeout on key {key_index + 1}, retrying with key {next_key_index + 1}...")
                     return await self._get_with_key(session, next_key_index, endpoint, params, retry_attempt + 1)
@@ -79,10 +70,8 @@ class ParallelAPIClient:
                 raise
 
     async def get_single(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
-        """Make a single request using the least recently used key"""
         connector = aiohttp.TCPConnector(limit=100, limit_per_host=30)
         async with aiohttp.ClientSession(connector=connector) as session:
-            # Find the key that was used longest ago
             key_index = min(range(self.num_keys),
                           key=lambda i: self.last_request_times[i])
 
@@ -90,24 +79,19 @@ class ParallelAPIClient:
             return result
 
     async def get_many(self, requests: List[Tuple[str, Optional[Dict]]]) -> List[Dict]:
-        """Make multiple requests in parallel using all available keys"""
         results = []
 
         connector = aiohttp.TCPConnector(limit=100, limit_per_host=30)
         async with aiohttp.ClientSession(connector=connector) as session:
-            # Create tasks for all requests
             tasks = []
             import random
             
-            # Randomly shuffle key assignments for better distribution
             key_assignments = []
             for i in range(len(requests)):
                 key_assignments.append(i % self.num_keys)
             
-            # Shuffle to avoid always using keys in order
             random.shuffle(key_assignments)
             
-            # Debug: show first few assignments
             if len(requests) <= 30:
                 print(f"      [DEBUG] Key assignment order: {key_assignments}")
             
@@ -116,7 +100,6 @@ class ParallelAPIClient:
                 task = self._get_with_key(session, key_index, endpoint, params)
                 tasks.append(task)
 
-            # Execute all tasks in parallel with limited concurrency
             semaphore = asyncio.Semaphore(self.num_keys * 2)
             
             async def bounded_task(task):
@@ -126,7 +109,6 @@ class ParallelAPIClient:
             bounded_tasks = [bounded_task(task) for task in tasks]
             responses = await asyncio.gather(*bounded_tasks, return_exceptions=True)
 
-            # Process results
             for response in responses:
                 if isinstance(response, Exception):
                     results.append({"error": str(response)})
@@ -134,24 +116,19 @@ class ParallelAPIClient:
                     result, _ = response
                     results.append(result)
 
-        # Print stats every 50 requests in parallel mode
         if self.total_requests % 50 == 0:
             self._print_stats()
 
         return results
 
     def get(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
-        """Synchronous wrapper for single request"""
         return asyncio.run(self.get_single(endpoint, params))
 
     def get_batch(self, requests: List[Tuple[str, Optional[Dict]]]) -> List[Dict]:
-        """Synchronous wrapper for batch requests"""
         return asyncio.run(self.get_many(requests))
 
     def _print_stats(self):
-        """Print usage statistics"""
         print(f"\n      [PARALLEL MODE] Total requests: {self.total_requests} | Keys active: {sum(1 for c in self.request_counts.values() if c > 0)}/{self.num_keys}")
-        # Show top 5 most used keys
         sorted_keys = sorted(range(self.num_keys), key=lambda i: self.request_counts[i], reverse=True)[:5]
         key_info = []
         for i in sorted_keys:
