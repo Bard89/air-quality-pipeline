@@ -92,7 +92,11 @@ class IncrementalDownloaderAll:
                 page += 1
 
             except Exception as e:
-                print(f"\n      Error on page {page}: {str(e)[:50]}")
+                error_msg = str(e)[:100]
+                if ('408' in error_msg or 'timeout' in error_msg.lower()) and page > 1:
+                    print(f"\n      Timeout on page {page}, stopping...")
+                else:
+                    print(f"\n      Error on page {page}: {error_msg}")
                 break
 
         print(f"\n      Total: {total_fetched} measurements fetched")

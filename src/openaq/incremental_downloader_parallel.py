@@ -21,6 +21,7 @@ class IncrementalDownloaderParallel:
 
         if self.is_parallel:
             print("Using PARALLEL downloader for maximum speed!")
+            print(f"Parallel API client detected with {getattr(client.api, 'num_keys', 'unknown')} keys")
 
     def _get_sequential_downloader(self):
         """Get sequential downloader instance"""
@@ -69,10 +70,19 @@ class IncrementalDownloaderParallel:
                 request_map[request_index] = (sensor_id, page)
 
         print(f"      Fetching {len(all_requests)} pages in parallel from {len(sensor_ids)} sensors...")
+        print(f"      Using {getattr(self.client.api, 'num_keys', 1)} API keys concurrently")
 
         # Execute all requests in parallel
         if hasattr(self.client.api, 'get_batch'):
             results = self.client.api.get_batch(all_requests)
+            # Count successful requests by API key
+            key_usage = {}
+            for result in results:
+                if isinstance(result, dict) and '_api_key_index' in result:
+                    key_idx = result['_api_key_index']
+                    key_usage[key_idx] = key_usage.get(key_idx, 0) + 1
+            if key_usage:
+                print(f"      API keys used: {sorted(key_usage.keys())}")
         else:
             # Fallback to sequential if not parallel client
             results = []
@@ -85,6 +95,9 @@ class IncrementalDownloaderParallel:
         for i, result in enumerate(results):
             if 'error' not in result:
                 sensor_id, page = request_map[i]
+                # Remove tracking info before processing
+                if '_api_key_index' in result:
+                    del result['_api_key_index']
                 measurements = result.get('results', [])
                 sensor_data[sensor_id].extend(measurements)
 
@@ -114,19 +127,17 @@ class IncrementalDownloaderParallel:
                 page += 1
 
             except Exception as e:
-                consecutive_errors += 1
                 error_msg = str(e)[:100]
                 
-                if '408' in error_msg or 'timeout' in error_msg.lower():
-                    print(f"\n      Timeout on page {page}, retrying...")
-                    if consecutive_errors < 3:
-                        time.sleep(2)  # Brief pause before retry
-                        continue
+                if ('408' in error_msg or 'timeout' in error_msg.lower()) and consecutive_errors == 0:
+                    print(f"\n      Timeout on page {page}, retrying once...")
+                    consecutive_errors += 1
+                    time.sleep(1)  # Brief pause before retry
+                    continue
                 
                 print(f"\n      Error on page {page}: {error_msg}")
-                if consecutive_errors >= 3:
-                    print("      Too many consecutive errors, stopping...")
-                    break
+                print("      Stopping this sensor...")
+                break
 
         return all_data
 
