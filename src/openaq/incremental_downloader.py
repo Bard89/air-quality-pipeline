@@ -52,16 +52,24 @@ class IncrementalDownloader:
             if parameters is None or param_name in parameters:
                 sensors.append(sensor)
         
-        for sensor in sensors:
+        print(f"  Processing {len(sensors)} sensors...")
+        
+        for i, sensor in enumerate(sensors):
             sensor_id = sensor.get('id')
+            param_name = sensor.get('parameter', {}).get('name', 'unknown')
             if not sensor_id:
                 continue
-                
+            
+            print(f"    Sensor {i+1}/{len(sensors)}: {param_name} (ID: {sensor_id})")
+            
             current_date = start_date
             chunk_days = 90
+            sensor_measurements = 0
             
             while current_date < end_date:
                 chunk_end = min(current_date + timedelta(days=chunk_days), end_date)
+                
+                print(f"      Fetching {current_date.strftime('%Y-%m-%d')} to {chunk_end.strftime('%Y-%m-%d')}...", end='', flush=True)
                 
                 try:
                     response = self.client.get_sensor_measurements(
@@ -72,6 +80,8 @@ class IncrementalDownloader:
                     )
                     
                     measurements = response.get('results', [])
+                    if measurements:
+                        print(f" {len(measurements)} found", end='', flush=True)
                     
                     for m in measurements:
                         period = m.get('period', {})
@@ -79,11 +89,11 @@ class IncrementalDownloader:
                         parameter = m.get('parameter', {})
                         
                         if datetime_from.get('utc') and m.get('value') is not None:
-                            # Parse measurement datetime and check if it's within our date range
                             meas_datetime = pd.to_datetime(datetime_from.get('utc'))
                             if meas_datetime < start_date or meas_datetime > end_date:
-                                continue  # Skip measurements outside our date range
+                                continue
                             
+                            sensor_measurements += 1
                             all_data.append({
                                 'datetime': datetime_from.get('utc'),
                                 'value': float(m.get('value')),
@@ -98,11 +108,22 @@ class IncrementalDownloader:
                                 'unit': parameter.get('units')
                             })
                     
+                    if not measurements:
+                        print(f" no data")
+                    else:
+                        filtered_count = sum(1 for m in measurements 
+                                           if pd.to_datetime(m.get('period', {}).get('datetimeFrom', {}).get('utc', '2000-01-01')) >= start_date 
+                                           and pd.to_datetime(m.get('period', {}).get('datetimeFrom', {}).get('utc', '2099-01-01')) <= end_date)
+                        print(f" ({filtered_count} in date range)")
+                    
                 except Exception as e:
-                    print(f"\n  Error sensor {sensor_id}: {str(e)[:50]}")
+                    print(f" ERROR: {str(e)[:50]}")
                 
                 current_date = chunk_end
                 time.sleep(1.05)
+            
+            if sensor_measurements > 0:
+                print(f"      Total: {sensor_measurements} measurements kept")
         
         if all_data:
             df = pd.DataFrame(all_data)
@@ -119,7 +140,6 @@ class IncrementalDownloader:
                                    max_locations: Optional[int] = None,
                                    resume: bool = True) -> str:
         
-        # Check for checkpoint
         checkpoint = None
         completed_locations = []
         start_index = 0
@@ -135,16 +155,17 @@ class IncrementalDownloader:
                 checkpoint = None
         
         if not checkpoint:
-            # Start fresh
             filename = f"{country_code.lower()}_airquality_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.csv"
             output_path = Path(f'data/openaq/processed/{filename}')
             output_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Clear any existing file
             if output_path.exists():
                 output_path.unlink()
+            
+            headers = ['datetime', 'value', 'sensor_id', 'location_id', 'location_name', 
+                      'city', 'country', 'latitude', 'longitude', 'parameter', 'unit']
+            pd.DataFrame(columns=headers).to_csv(output_path, index=False)
         
-        # Get all locations
         print(f"\nFetching all locations in {country_code}...")
         all_locations = []
         page = 1
@@ -164,7 +185,6 @@ class IncrementalDownloader:
         
         print(f"Found {len(all_locations)} locations")
         
-        # Filter to active locations
         active_locations = []
         for loc in all_locations:
             if loc.get('datetimeLast'):
@@ -173,7 +193,6 @@ class IncrementalDownloader:
                     if loc['id'] not in completed_locations:
                         active_locations.append(loc)
         
-        # Sort by sensor count
         active_locations.sort(key=lambda x: len(x.get('sensors', [])), reverse=True)
         
         if max_locations and len(active_locations) > max_locations:
@@ -183,7 +202,6 @@ class IncrementalDownloader:
         print(f"Active locations to download: {len(active_locations)}")
         print(f"Already completed: {len(completed_locations)}")
         
-        # Calculate estimates
         avg_sensors_per_location = sum(len(loc.get('sensors', [])) for loc in active_locations) / len(active_locations) if active_locations else 0
         days = (end_date - start_date).days
         chunks_per_sensor = (days + 89) // 90
@@ -196,7 +214,6 @@ class IncrementalDownloader:
         print("You can safely interrupt and resume later")
         print("-" * 60)
         
-        # Download measurements
         start_time = time.time()
         total_measurements = 0
         
@@ -208,23 +225,23 @@ class IncrementalDownloader:
             print(f"\nLocation {len(completed_locations)+1}/{total_locations}: {loc_name}")
             print(f"  ID: {loc_id} | Sensors: {sensor_count}")
             
-            # Download data for this location
             location_start = time.time()
             df = self.download_location_sensors(location, start_date, end_date, parameters)
             
             if not df.empty:
-                # Save immediately
                 self.append_to_csv(df, output_path)
                 total_measurements += len(df)
                 print(f"  ✓ Saved {len(df):,} measurements in {time.time()-location_start:.1f}s")
+                
+                date_min = df['datetime'].min()
+                date_max = df['datetime'].max()
+                print(f"  Date range: {date_min.strftime('%Y-%m-%d')} to {date_max.strftime('%Y-%m-%d')}")
             else:
-                print(f"  ✗ No data found")
+                print(f"  ✗ No data found for date range {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
             
-            # Update checkpoint
             completed_locations.append(loc_id)
             self.save_checkpoint(country_code, i+1, total_locations, completed_locations, str(output_path))
             
-            # Progress update
             elapsed = time.time() - start_time
             if elapsed > 0 and (i - start_index + 1) > 0:
                 rate = (i - start_index + 1) / elapsed
@@ -233,7 +250,6 @@ class IncrementalDownloader:
                 print(f"  Progress: {len(completed_locations)}/{total_locations} | "
                       f"Total: {total_measurements:,} measurements | ETA: {eta/60:.1f} min")
         
-        # Cleanup checkpoint on completion
         if self.checkpoint_file.exists():
             self.checkpoint_file.unlink()
         

@@ -84,7 +84,6 @@ Examples:
     if not args.country:
         parser.error("--country is required")
     
-    # Determine date range
     if args.days:
         from datetime import timedelta
         end_date = datetime.now(timezone.utc)
@@ -95,7 +94,6 @@ Examples:
     else:
         parser.error("Specify either --start/--end or --days")
     
-    # Get country info
     country_id, country_name = get_country_id(client, args.country)
     if not country_id:
         print(f"Error: Country '{args.country}' not found")
@@ -107,7 +105,6 @@ Examples:
     print(f"Date range: {start_date.date()} to {end_date.date()}")
     print(f"Parameters: {args.parameters or 'all'}")
     
-    # Country-wide mode: most efficient for full country downloads
     if args.country_wide:
         print(f"\nMode: INCREMENTAL COUNTRY-WIDE")
         print("Data saves after each location - safe to interrupt!")
@@ -128,7 +125,6 @@ Examples:
         
         return
     
-    # Find locations
     finder = LocationFinder(client)
     print(f"\nFinding locations in {country_name}...")
     
@@ -138,18 +134,15 @@ Examples:
     )
     print(f"Found {len(locations)} locations")
     
-    # Extract all sensors
     all_sensors = []
     for location in locations:
         sensors = finder.extract_sensor_info(location)
         all_sensors.extend(sensors)
     
-    # Filter by parameters if specified
     if args.parameters:
         param_list = [p.strip().lower() for p in args.parameters.split(',')]
         all_sensors = [s for s in all_sensors if s['parameter'] in param_list]
     
-    # Filter active sensors
     if args.parameters:
         active_sensors = []
         param_list = [p.strip().lower() for p in args.parameters.split(',')]
@@ -170,7 +163,6 @@ Examples:
     print(f"\nTotal sensors: {len(all_sensors)}")
     print(f"Active sensors: {len(active_sensors)}")
     
-    # Count by parameter
     param_counts = {}
     for s in active_sensors:
         p = s['parameter']
@@ -193,7 +185,6 @@ Examples:
         active_sensors = limited_sensors
         print(f"\nLimited to {len(active_sensors)} sensors")
     
-    # Warn about large downloads
     days = (end_date - start_date).days
     estimated_requests = len(active_sensors) * ((days + 89) // 90)  # 90-day chunks
     estimated_time = estimated_requests * 1.05 / 60  # 1.05s per request
@@ -212,7 +203,6 @@ Examples:
             print("Download cancelled.")
             sys.exit(0)
     
-    # Download data
     downloader = DataDownloader(client)
     print(f"\nStarting download from {len(active_sensors)} sensors...")
     
@@ -222,7 +212,6 @@ Examples:
         print("No data downloaded!")
         sys.exit(1)
     
-    # Save data
     filename = f"{args.country.lower()}_airquality_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.csv"
     output_path = storage.get_processed_dir('openaq') / filename
     df.to_csv(output_path, index=False)
@@ -233,7 +222,6 @@ Examples:
     print(f"{output_path}")
     print(f"{'='*60}")
     
-    # Analyze if requested
     if args.analyze:
         print("\nANALYZING DATA...")
         analyze_dataset(str(output_path))
