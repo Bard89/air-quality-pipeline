@@ -63,14 +63,17 @@ class IncrementalDownloaderParallel:
 
         # Build list of all requests
         for sensor_id in sensor_ids:
-            for page in range(1, min(3, max_pages_per_sensor + 1)):  # First 2 pages per sensor to avoid timeouts
+            # Fetch more pages if we have many API keys to utilize them better
+            pages_to_fetch = min(6, max(3, self.client.api.num_keys // len(sensor_ids))) if hasattr(self.client.api, 'num_keys') else 3
+            for page in range(1, min(pages_to_fetch + 1, max_pages_per_sensor + 1)):
                 endpoint = f'/sensors/{sensor_id}/measurements'
                 params = {'limit': 1000, 'page': page}
                 request_index = len(all_requests)
                 all_requests.append((endpoint, params))
                 request_map[request_index] = (sensor_id, page)
 
-        print(f"      Fetching {len(all_requests)} pages in parallel from {len(sensor_ids)} sensors...")
+        pages_per_sensor = len(all_requests) // len(sensor_ids) if sensor_ids else 0
+        print(f"      Fetching {len(all_requests)} pages in parallel ({pages_per_sensor} pages × {len(sensor_ids)} sensors)")
         print(f"      Using {getattr(self.client.api, 'num_keys', 1)} API keys concurrently")
 
         # Execute all requests in parallel
@@ -176,10 +179,11 @@ class IncrementalDownloaderParallel:
             param_name = sensor_info.get(sensor_id, 'unknown')
 
             # Check if we need more pages
-            if len(measurements) >= 2000:  # Got full 2 pages
+            pages_fetched = len(measurements) // 1000
+            if pages_fetched > 0 and len(measurements) % 1000 == 0:  # Got full pages
                 print(f"    Sensor {sensor_id} ({param_name}): {len(measurements)}+ measurements...")
                 # Fetch remaining pages sequentially
-                additional_data = self.fetch_remaining_sensor_data(sensor_id, start_page=3)
+                additional_data = self.fetch_remaining_sensor_data(sensor_id, start_page=pages_fetched + 1)
                 measurements.extend(additional_data)
 
             if measurements:
