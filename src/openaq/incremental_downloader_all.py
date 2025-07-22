@@ -8,13 +8,12 @@ import pandas as pd
 
 from src.openaq.client import OpenAQClient
 class IncrementalDownloaderAll:
-    """Downloads ALL data from sensors without any date filtering"""
 
     def __init__(self, client: OpenAQClient):
         self.client = client
         self.checkpoint_dir = Path('data/openaq/checkpoints')
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        self.checkpoint_file = None  # Will be set based on country and timestamp
+        self.checkpoint_file = None
 
     def save_checkpoint(self, country_code: str, location_index: int, total_locations: int,
                        completed_locations: List[int], output_file: str,
@@ -54,6 +53,12 @@ class IncrementalDownloaderAll:
         print("      Fetching ALL available data...")
 
         while page <= max_pages:
+            # Skip pages 17-18 due to consistent API timeouts
+            if page in [17, 18]:
+                print(f"\n      Skipping page {page} (known timeout issue)...")
+                page += 1
+                continue
+                
             try:
                 params = {
                     'limit': 1000,
@@ -94,6 +99,13 @@ class IncrementalDownloaderAll:
 
             except Exception as e:
                 error_msg = str(e)[:100]
+                
+                # For page 16, skip to 19 if timeout (since 17-18 also timeout)
+                if page == 16 and ('408' in error_msg or 'timeout' in error_msg.lower()):
+                    print(f"\n      Timeout on page {page}, skipping to page 19...")
+                    page = 19
+                    continue
+                    
                 if ('408' in error_msg or 'timeout' in error_msg.lower()) and page > 1:
                     print(f"\n      Timeout on page {page}, stopping...")
                 else:
@@ -177,7 +189,6 @@ class IncrementalDownloaderAll:
         start_index = 0
         current_sensor_index = 0
         
-        # Generate unique checkpoint filename based on country and parameters
         param_str = '_'.join(parameters) if parameters else 'all'
         checkpoint_filename = f"checkpoint_{country_code.lower()}_{param_str}.json"
         self.checkpoint_file = self.checkpoint_dir / checkpoint_filename

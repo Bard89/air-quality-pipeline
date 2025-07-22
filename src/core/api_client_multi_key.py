@@ -4,8 +4,6 @@ import time
 
 import requests
 class MultiKeyRateLimitedAPIClient:
-    """API client that rotates through multiple API keys to increase rate limits"""
-
     def __init__(self, base_url: str, api_keys: List[str], requests_per_minute_per_key: int = 60):
         if not api_keys:
             raise ValueError("At least one API key must be provided")
@@ -76,8 +74,6 @@ class MultiKeyRateLimitedAPIClient:
 
 
 class RateLimitedAPIClient:
-    """Backward compatible single-key API client"""
-
     def __init__(self, base_url: str, api_key: Optional[str] = None, requests_per_minute: int = 60):
         self.base_url = base_url
         self.session = requests.Session()
