@@ -351,13 +351,24 @@ class IncrementalDownloaderParallel:
         avg_sensors = sum(len(loc.get('sensors', [])) for loc in active_locations) / len(active_locations) if active_locations else 0
         available_keys = getattr(self.client.api, 'num_keys', 1)
         
-        # Use parallel location processing if we have many keys and few sensors per location
-        use_parallel_locations = self.is_parallel and available_keys > 10 and avg_sensors < 10
+        print(f"\nParallel mode decision:")
+        print(f"  Available API keys: {available_keys}")
+        print(f"  Average sensors per location: {avg_sensors:.1f}")
+        
+        # Use parallel location processing if we have many keys and sensors won't saturate them
+        # With 23 keys, we can handle locations with up to ~15 sensors on average
+        sensors_per_key_threshold = 0.7  # We want at least 70% of keys to be utilized
+        max_avg_sensors = available_keys * sensors_per_key_threshold / 3  # 3 pages per sensor estimate
+        
+        use_parallel_locations = self.is_parallel and available_keys > 10 and avg_sensors < max_avg_sensors
         
         if use_parallel_locations:
-            print(f"\nUsing PARALLEL LOCATION PROCESSING")
-            print(f"Average sensors per location: {avg_sensors:.1f}")
-            print(f"Will process multiple locations concurrently to utilize all {available_keys} API keys")
+            print(f"  → Using PARALLEL LOCATION PROCESSING")
+            print(f"  → Will process multiple locations concurrently to utilize all {available_keys} API keys")
+        else:
+            print(f"  → Using SEQUENTIAL location processing (parallel sensors within each location)")
+            if avg_sensors >= max_avg_sensors:
+                print(f"  → Reason: High sensor density ({avg_sensors:.1f} sensors/location) can utilize all keys")
             
             # Process locations in batches
             batch_size = max(2, min(10, int(available_keys / (avg_sensors * 3))))  # 3 pages per sensor estimate
