@@ -1,8 +1,9 @@
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 
@@ -221,6 +222,54 @@ class IncrementalDownloaderParallel:
 
         return total_measurements
 
+    def process_locations_batch(self, locations_batch: List[Tuple[int, Dict]], 
+                               output_path: Path, parameters: Optional[List[str]] = None) -> Tuple[List[int], int]:
+        """Process multiple locations in parallel using thread pool"""
+        batch_completed = []
+        batch_measurements = 0
+        
+        def process_single_location(loc_info: Tuple[int, Dict]) -> Tuple[int, int]:
+            _, location = loc_info
+            loc_id = location['id']
+            
+            try:
+                if self.is_parallel and len(location.get('sensors', [])) > 3:
+                    loc_measurements = self.process_location_parallel(
+                        location, output_path, parameters
+                    )
+                else:
+                    sequential_downloader = self._get_sequential_downloader()
+                    loc_measurements = sequential_downloader.download_location_sensors_all(
+                        location, output_path, parameters
+                    )
+                
+                return (loc_id, loc_measurements)
+            except Exception as e:
+                print(f"  ✗ Error processing location {location.get('name', 'Unknown')}: {str(e)}")
+                return (loc_id, 0)
+        
+        # Calculate optimal number of concurrent locations
+        total_sensors = sum(len(loc[1].get('sensors', [])) for loc in locations_batch)
+        avg_sensors_per_location = total_sensors / len(locations_batch) if locations_batch else 1
+        
+        # Estimate how many locations we can process concurrently
+        available_keys = getattr(self.client.api, 'num_keys', 1)
+        max_concurrent_locations = max(1, min(
+            len(locations_batch),
+            int(available_keys / max(avg_sensors_per_location * 3, 1))  # Assume 3 pages per sensor
+        ))
+        
+        print(f"\n  Processing batch of {len(locations_batch)} locations ({max_concurrent_locations} concurrently)...")
+        
+        with ThreadPoolExecutor(max_workers=max_concurrent_locations) as executor:
+            results = list(executor.map(process_single_location, locations_batch))
+        
+        for loc_id, measurements in results:
+            batch_completed.append(loc_id)
+            batch_measurements += measurements
+        
+        return batch_completed, batch_measurements
+
     def download_country_all(self, country_code: str, country_id: int,
                            parameters: Optional[List[str]] = None,
                            max_locations: Optional[int] = None,
@@ -297,58 +346,130 @@ class IncrementalDownloaderParallel:
 
         start_time = time.time()
         total_measurements = 0
-
-        for i, location in enumerate(active_locations[start_index:], start=start_index):
-            loc_id = location['id']
-            loc_name = location.get('name', 'Unknown')
-            sensor_count = len(location.get('sensors', []))
-
-            print(f"\nLocation {len(completed_locations)+1}/{total_locations}: {loc_name}")
-            print(f"  ID: {loc_id} | Sensors: {sensor_count}")
-
-            location_start = time.time()
-
-            try:
-                self.save_checkpoint(country_code, i, total_locations, completed_locations,
-                                   str(output_path), loc_id)
-
-                if self.is_parallel and sensor_count > 3:
-                    loc_measurements = self.process_location_parallel(
-                        location, output_path, parameters
+        
+        # Determine if we should use parallel location processing
+        avg_sensors = sum(len(loc.get('sensors', [])) for loc in active_locations) / len(active_locations) if active_locations else 0
+        available_keys = getattr(self.client.api, 'num_keys', 1)
+        
+        print(f"\nParallel mode decision:")
+        print(f"  Available API keys: {available_keys}")
+        print(f"  Average sensors per location: {avg_sensors:.1f}")
+        
+        # Use parallel location processing if we have many keys and sensors won't saturate them
+        # With 23 keys, we can handle locations with up to ~15 sensors on average
+        sensors_per_key_threshold = 0.7  # We want at least 70% of keys to be utilized
+        max_avg_sensors = available_keys * sensors_per_key_threshold / 3  # 3 pages per sensor estimate
+        
+        use_parallel_locations = self.is_parallel and available_keys > 10 and avg_sensors < max_avg_sensors
+        
+        if use_parallel_locations:
+            print(f"  → Using PARALLEL LOCATION PROCESSING")
+            print(f"  → Will process multiple locations concurrently to utilize all {available_keys} API keys")
+        else:
+            print(f"  → Using SEQUENTIAL location processing (parallel sensors within each location)")
+            if avg_sensors >= max_avg_sensors:
+                print(f"  → Reason: High sensor density ({avg_sensors:.1f} sensors/location) can utilize all keys")
+            
+            # Process locations in batches
+            batch_size = max(2, min(10, int(available_keys / (avg_sensors * 3))))  # 3 pages per sensor estimate
+            
+            i = start_index
+            while i < len(active_locations):
+                batch_end = min(i + batch_size, len(active_locations))
+                batch = [(idx, loc) for idx, loc in enumerate(active_locations[i:batch_end], start=i)]
+                
+                print(f"\nProcessing locations {len(completed_locations)+1}-{len(completed_locations)+len(batch)} of {total_locations}")
+                for _, loc in batch:
+                    print(f"  - {loc.get('name', 'Unknown')} (ID: {loc['id']}, Sensors: {len(loc.get('sensors', []))})")  
+                
+                batch_start = time.time()
+                
+                try:
+                    # Save checkpoint before processing batch
+                    self.save_checkpoint(country_code, i, total_locations, completed_locations,
+                                       str(output_path), batch[0][1]['id'])
+                    
+                    batch_completed, batch_measurements = self.process_locations_batch(
+                        batch, output_path, parameters
                     )
-                else:
-                    sequential_downloader = self._get_sequential_downloader()
-                    loc_measurements = sequential_downloader.download_location_sensors_all(
-                        location, output_path, parameters
-                    )
+                    
+                    completed_locations.extend(batch_completed)
+                    total_measurements += batch_measurements
+                    
+                    batch_elapsed = time.time() - batch_start
+                    if batch_measurements > 0:
+                        rate = batch_measurements / batch_elapsed if batch_elapsed > 0 else 0
+                        print(f"\n  ✓ Batch complete: {batch_measurements:,} measurements in {batch_elapsed:.1f}s ({rate:.0f} meas/sec)")
+                    
+                except KeyboardInterrupt:
+                    print("\n\nInterrupted! All completed data has been saved.")
+                    print("Resume by running the same command again.")
+                    raise
+                
+                i = batch_end
+                self.save_checkpoint(country_code, i, total_locations, completed_locations, str(output_path))
+                
+                elapsed = time.time() - start_time
+                if elapsed > 0:
+                    locations_rate = len(completed_locations) / elapsed * 60  # locations per minute
+                    remaining = len(active_locations) - i
+                    eta = remaining / locations_rate if locations_rate > 0 else 0
+                    print(f"  Progress: {len(completed_locations)}/{total_locations} | "
+                          f"Total: {total_measurements:,} measurements | ETA: {eta:.1f} min")
+        
+        else:
+            # Original sequential processing for high sensor count locations
+            for i, location in enumerate(active_locations[start_index:], start=start_index):
+                loc_id = location['id']
+                loc_name = location.get('name', 'Unknown')
+                sensor_count = len(location.get('sensors', []))
 
-                total_measurements += loc_measurements
+                print(f"\nLocation {len(completed_locations)+1}/{total_locations}: {loc_name}")
+                print(f"  ID: {loc_id} | Sensors: {sensor_count}")
 
-                if loc_measurements > 0:
-                    elapsed = time.time() - location_start
-                    rate = loc_measurements / elapsed if elapsed > 0 else 0
-                    print(f"  ✓ Location complete: {loc_measurements:,} measurements in {elapsed:.1f}s ({rate:.0f} meas/sec)")
-                else:
-                    print("  ✗ No data found")
+                location_start = time.time()
 
-            except KeyboardInterrupt:
-                print("\n\nInterrupted! All completed data has been saved.")
-                print("Resume by running the same command again.")
-                raise
-            except Exception as e:
-                print(f"  ✗ Error processing location: {str(e)}")
-                print("  Skipping to next location...")
+                try:
+                    self.save_checkpoint(country_code, i, total_locations, completed_locations,
+                                       str(output_path), loc_id)
 
-            completed_locations.append(loc_id)
-            self.save_checkpoint(country_code, i+1, total_locations, completed_locations, str(output_path))
+                    if self.is_parallel and sensor_count > 3:
+                        loc_measurements = self.process_location_parallel(
+                            location, output_path, parameters
+                        )
+                    else:
+                        sequential_downloader = self._get_sequential_downloader()
+                        loc_measurements = sequential_downloader.download_location_sensors_all(
+                            location, output_path, parameters
+                        )
 
-            elapsed = time.time() - start_time
-            if elapsed > 0 and (i - start_index + 1) > 0:
-                rate = (i - start_index + 1) / elapsed
-                remaining = len(active_locations) - i - 1
-                eta = remaining / rate if rate > 0 else 0
-                print(f"  Progress: {len(completed_locations)}/{total_locations} | "
-                      f"Total: {total_measurements:,} measurements | ETA: {eta/60:.1f} min")
+                    total_measurements += loc_measurements
+
+                    if loc_measurements > 0:
+                        elapsed = time.time() - location_start
+                        rate = loc_measurements / elapsed if elapsed > 0 else 0
+                        print(f"  ✓ Location complete: {loc_measurements:,} measurements in {elapsed:.1f}s ({rate:.0f} meas/sec)")
+                    else:
+                        print("  ✗ No data found")
+
+                except KeyboardInterrupt:
+                    print("\n\nInterrupted! All completed data has been saved.")
+                    print("Resume by running the same command again.")
+                    raise
+                except Exception as e:
+                    print(f"  ✗ Error processing location: {str(e)}")
+                    print("  Skipping to next location...")
+
+                completed_locations.append(loc_id)
+                self.save_checkpoint(country_code, i+1, total_locations, completed_locations, str(output_path))
+
+                elapsed = time.time() - start_time
+                if elapsed > 0 and (i - start_index + 1) > 0:
+                    rate = (i - start_index + 1) / elapsed
+                    remaining = len(active_locations) - i - 1
+                    eta = remaining / rate if rate > 0 else 0
+                    print(f"  Progress: {len(completed_locations)}/{total_locations} | "
+                          f"Total: {total_measurements:,} measurements | ETA: {eta/60:.1f} min")
 
         if self.checkpoint_file.exists():
             self.checkpoint_file.unlink()
