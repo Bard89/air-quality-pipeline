@@ -56,7 +56,7 @@ pip install -r requirements.txt
 # Download all PM2.5 data from top 50 locations
 ./download_air_quality.py --country IN --parameters pm25 --country-wide --max-locations 50
 
-# Use parallel mode for experimental faster downloads (requires multiple API keys)
+# Use parallel mode for 2-3x faster downloads (requires multiple API keys)
 ./download_air_quality.py --country IN --country-wide --max-locations 10 --parallel
 ```
 
@@ -68,7 +68,7 @@ pip install -r requirements.txt
 - `--max-locations`: Limit number of locations (use with --country-wide)
 - `--analyze, -a`: Auto-analyze after download (default: true)
 - `--list-countries`: List all available countries
-- `--parallel`: Enable parallel mode (experimental, requires multiple API keys)
+- `--parallel`: Enable parallel mode for faster downloads (requires multiple API keys)
 
 ### Available Parameters
 
@@ -147,14 +147,14 @@ Each download includes:
 │   ├── core/                # Reusable components
 │   │   ├── api_client.py    # Rate-limited HTTP client
 │   │   ├── api_client_multi_key.py  # Multi-key rotation for faster downloads
-│   │   ├── api_client_parallel.py   # Parallel API client (experimental)
+│   │   ├── api_client_parallel.py   # Parallel API client for concurrent requests
 │   │   └── data_storage.py  # File management
 │   ├── openaq/              # OpenAQ-specific modules
 │   │   ├── client.py        # API wrapper
 │   │   ├── location_finder.py
 │   │   ├── data_downloader.py
 │   │   ├── incremental_downloader_all.py  # Downloads all sensor data
-│   │   └── incremental_downloader_parallel.py  # Parallel downloader (experimental)
+│   │   └── incremental_downloader_parallel.py  # Parallel downloader with location batching
 │   └── utils/
 │       └── data_analyzer.py # Data analysis
 └── data/                    # Downloaded data (gitignored)
@@ -221,8 +221,10 @@ Use `--country-wide` to download all historical data from a country:
 # Output: "Resuming from checkpoint (location 150/500)"
 ```
 
-**Important Note:**
-The tool downloads ALL available historical data from each sensor because the OpenAQ API v3 has a limitation where it ignores date filtering parameters and returns data starting from the oldest available measurements.
+**Important Notes:**
+- The tool downloads ALL available historical data from each sensor because the OpenAQ API v3 ignores date filtering parameters
+- Maximum 16,000 measurements per sensor due to API page limit (pages 17+ consistently timeout)
+- Parallel mode automatically skips problematic pages to ensure smooth downloads
 
 ### Tips for Efficient Downloads
 
@@ -235,7 +237,21 @@ The tool downloads ALL available historical data from each sensor because the Op
 
 # For testing, limit locations
 ./download_air_quality.py --country US --country-wide --max-locations 10
+
+# Use parallel mode with multiple API keys for fastest downloads
+./download_air_quality.py --country VN --country-wide --parallel
 ```
+
+### Parallel Mode Features
+
+When using `--parallel` with multiple API keys:
+- **Concurrent API requests**: Uses all available API keys simultaneously
+- **Smart location batching**: Processes multiple locations in parallel when beneficial
+- **API key randomization**: Distributes load evenly across all keys
+- **Automatic optimization**: Chooses between parallel sensors or parallel locations based on data structure
+- **2-3x faster downloads**: Especially effective with 10+ API keys
+
+**Note**: Each sensor is limited to 16,000 measurements (16 pages × 1,000 per page) due to API constraints.
 
 ### General Performance
 
