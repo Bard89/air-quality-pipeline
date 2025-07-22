@@ -244,6 +244,8 @@ The tool downloads ALL available historical data from each sensor because the Op
 - Effective delay between requests: 1.0s ÷ number of keys
 - Data saved incrementally after each sensor completes (safe from interruptions)
 - Downloads ALL historical data from each sensor (no date filtering)
+- Shows detailed progress: start time, elapsed time, measurements/second, and ETA
+- Real-time progress updates during sensor downloads
 
 **Speed improvements with multiple API keys:**
 - 1 key: Standard speed (60 req/min)
