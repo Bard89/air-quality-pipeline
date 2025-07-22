@@ -1,179 +1,145 @@
 # Air Quality Data Collection
 
-Collect and process air quality data from OpenAQ for machine learning models. This project downloads sensor-specific measurements with precise coordinates for accurate geographical predictions.
+A minimal, efficient tool for downloading global air quality data from OpenAQ. Downloads sensor-specific measurements with precise coordinates for machine learning applications.
 
 ## Setup
 
-### Prerequisites
-- Python 3.8+
-- OpenAQ API key (free)
-
-### Installation
-
-1. Clone the repository
-2. Install dependencies:
+1. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Get OpenAQ API key:
+2. Get your OpenAQ API key:
    - Sign up at https://explore.openaq.org/register
-   - Find your API key in account settings
-
-4. Configure environment:
-```bash
-cp .env.example .env
-# Add your API key to .env file
-```
-
-## Project Structure
-
-```
-├── src/
-│   ├── core/                 # Reusable components
-│   │   ├── api_client.py     # Rate-limited API client
-│   │   └── data_storage.py   # Data persistence
-│   ├── openaq/              # OpenAQ-specific modules
-│   │   ├── client.py        # OpenAQ API wrapper
-│   │   ├── location_finder.py # Find sensors by location
-│   │   └── data_downloader.py # Download measurements
-│   └── utils/               # Utility scripts
-│       └── data_summary.py  # Data analysis tools
-├── config/                  # Configuration files
-│   ├── openaq_config.json   # API settings
-│   └── country_mapping.json # Country ID mappings
-└── data/                   # Downloaded data (gitignored)
-    └── openaq/
-        ├── raw/            # Original API responses
-        └── processed/      # Cleaned CSV files
-```
-
-## Quick Start
-
-Run the interactive example to download data:
-
-```bash
-python example_download.py
-```
-
-This will guide you through:
-1. Selecting a country
-2. Finding active PM2.5 sensors
-3. Downloading data with exact coordinates
+   - Create `.env` file: `cp .env.example .env`
+   - Add your API key to `.env`
 
 ## Usage
 
-### 1. Download Sensor Data by Country
-
-Download air quality data from multiple sensors in a specific country:
+### Download Air Quality Data
 
 ```bash
-python src/download_vietnam_sensors.py
+# List available countries
+./download_air_quality.py --list-countries
+
+# Download full year from India
+./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31
+
+# Download last 30 days from Japan
+./download_air_quality.py --country JP --days 30
+
+# Download specific parameters from USA
+./download_air_quality.py --country US --days 90 --parameters pm25,pm10,no2
+
+# Download all particulate matter data
+./download_air_quality.py --country DE --days 30 --parameters pm1,pm25,pm10
+
+# Download air quality + weather data
+./download_air_quality.py --country JP --days 7 --parameters pm25,temperature,relativehumidity
+
+# Limit sensors for faster downloads
+./download_air_quality.py --country TH --days 7 --parameters pm25 --limit-sensors 10
 ```
 
-This will:
-- Find all active sensors in Vietnam
-- Download PM2.5 measurements with exact coordinates
-- Save data as CSV with sensor locations
+### Command Options
 
-### 2. Analyze Downloaded Data
+- `--country, -c`: Country code (e.g., US, IN, JP, TH)
+- `--start, -s`: Start date (YYYY-MM-DD)
+- `--end, -e`: End date (YYYY-MM-DD)
+- `--days, -d`: Alternative: download last N days
+- `--parameters, -p`: Comma-separated parameters (see available parameters below)
+- `--limit-sensors, -l`: Limit sensors per parameter
+- `--analyze, -a`: Auto-analyze after download (default: true)
 
-View summary statistics of downloaded data:
+### Available Parameters
 
-```bash
-python src/utils/data_summary.py
-```
+**Particulate Matter:**
+- `pm25` - Fine particles (≤2.5 μm) - Most common
+- `pm10` - Coarse particles (≤10 μm)
+- `pm1` - Ultrafine particles (≤1 μm)
 
-### 3. Custom Data Collection
+**Gases:**
+- `no2` - Nitrogen dioxide
+- `o3` - Ozone
+- `co` - Carbon monoxide
+- `so2` - Sulfur dioxide
+- `no` - Nitric oxide
+- `nox` - Nitrogen oxides
 
-```python
-from src.openaq.client import OpenAQClient
-from src.openaq.location_finder import LocationFinder
-from src.openaq.data_downloader import DataDownloader
+**Meteorological:**
+- `temperature` - Air temperature
+- `relativehumidity` - Relative humidity
+- `pressure` - Atmospheric pressure
+- `windspeed` - Wind speed
+- `winddirection` - Wind direction
 
-# Initialize client
-client = OpenAQClient(api_key="your_key")
-finder = LocationFinder(client)
-downloader = DataDownloader(client)
+**Other:**
+- `bc` - Black carbon
+- `um003` - Ultrafine particle count (0.3μm)
+- `um010` - Particle count (1.0μm)
+- `um025` - Particle count (2.5μm)
+- `um100` - Particle count (10μm)
 
-# Find sensors in a country
-locations = finder.find_locations_in_country('VN', country_mapping)
-sensors = finder.find_active_sensors(locations, parameter='pm25')
+## Output
 
-# Download data
-start_date = datetime(2024, 1, 1, tzinfo=timezone.utc)
-end_date = datetime(2024, 12, 31, tzinfo=timezone.utc)
-df = downloader.download_multiple_sensors(sensors, start_date, end_date)
-```
+Data is saved to `data/openaq/processed/{country}_airquality_{startdate}_{enddate}.csv`
 
-## Data Format
-
-Downloaded CSV files include:
+### CSV Format
 - `datetime`: UTC timestamp
 - `value`: Measurement value
 - `sensor_id`: Unique sensor identifier
 - `location_id`: Location identifier
 - `location_name`: Human-readable location
 - `latitude`, `longitude`: Exact sensor coordinates
-- `parameter`: Pollutant type (e.g., pm25)
-- `unit`: Measurement unit (e.g., µg/m³)
+- `parameter`: Pollutant type
+- `unit`: Measurement unit
+- `city`, `country`: Geographic info
 
-## Configuration
+### Automatic Analysis
+Each download includes:
+- Spatial distribution of sensors
+- Parameter statistics (mean, min, max, percentiles)
+- Data completeness metrics
+- Coverage analysis
 
-### API Settings (`config/openaq_config.json`)
-- `rate_limit`: API request limits
-- `target_countries`: Countries to focus on
-- `pollutants`: Parameters to collect
+## Project Structure
 
-### Target Countries
-Default high-pollution countries:
-- China (CN)
-- India (IN)
-- Vietnam (VN)
-- Bangladesh (BD)
-- Pakistan (PK)
-- Indonesia (ID)
-- Thailand (TH)
-- Philippines (PH)
-
-## Rate Limits
-
-OpenAQ allows 60 requests per minute. The client automatically handles rate limiting.
+```
+├── download_air_quality.py   # Main CLI tool
+├── src/
+│   ├── core/                # Reusable components
+│   │   ├── api_client.py    # Rate-limited HTTP client
+│   │   └── data_storage.py  # File management
+│   ├── openaq/              # OpenAQ-specific modules
+│   │   ├── client.py        # API wrapper
+│   │   ├── location_finder.py
+│   │   └── data_downloader.py
+│   └── utils/
+│       └── data_analyzer.py # Data analysis
+└── data/                    # Downloaded data (gitignored)
+```
 
 ## Examples
 
-### Download One Month of Data
+### Re-analyze Existing Data
 ```python
-# See src/download_vietnam_sensors.py for full example
-start_date = datetime(2024, 6, 1, tzinfo=timezone.utc)
-end_date = datetime(2024, 6, 30, tzinfo=timezone.utc)
-df = downloader.download_sensor_data(sensor_id, start_date, end_date)
+from src.utils.data_analyzer import analyze_dataset
+analyze_dataset('data/openaq/processed/india_airquality_20240101_20241231.csv')
 ```
 
-### Parse Raw JSON to CSV
-```python
-from src.old_scripts.parse_to_csv import OpenAQParser
-parser = OpenAQParser()
-parser.process_all_raw_files()
-```
+### High-Pollution Countries
+Recommended countries with extensive sensor networks:
+- **Asia**: IN (India), CN (China), TH (Thailand), JP (Japan), KR (South Korea)
+- **Europe**: DE (Germany), GB (United Kingdom), PL (Poland)
+- **Americas**: US (United States), MX (Mexico), CL (Chile)
 
-## Troubleshooting
+## Performance
 
-### No data returned
-- Check if location has recent data using `get_latest_measurements()`
-- Some sensors may have historical data only
+- Rate limited to 60 requests/minute
+- Downloads in parallel where possible
+- Use `--limit-sensors` for testing
+- Full country downloads may take hours
 
-### Rate limit errors
-- Reduce concurrent requests
-- Increase delay between requests in config
+## License
 
-### Memory issues with large downloads
-- Download data in smaller date ranges
-- Process data in chunks
-
-## Contributing
-
-1. Keep code clean and self-documenting
-2. No unnecessary comments
-3. Use type hints
-4. Follow existing structure
+MIT

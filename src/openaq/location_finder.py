@@ -15,7 +15,7 @@ class LocationFinder:
         all_locations = []
         page = 1
         
-        while page <= 5:  # Limit pages to avoid too long downloads
+        while page <= 5:
             response = self.client.get_locations(country_ids=[country_id], page=page)
             locations = response.get('results', [])
             
@@ -53,7 +53,7 @@ class LocationFinder:
         
         return sensors
     
-    def find_active_sensors(self, locations: List[Dict], parameter: str = 'pm25', 
+    def find_active_sensors(self, locations: List[Dict], parameter: Optional[str] = None, 
                            min_date: Optional[str] = None) -> List[Dict]:
         active_sensors = []
         
@@ -61,7 +61,7 @@ class LocationFinder:
             sensors = self.extract_sensor_info(location)
             
             for sensor in sensors:
-                if sensor['parameter'] == parameter:
+                if parameter is None or sensor['parameter'] == parameter:
                     if min_date is None or (sensor['datetime_last'] and sensor['datetime_last'] >= min_date):
                         active_sensors.append(sensor)
         
