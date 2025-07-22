@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from src.openaq.client import OpenAQClient
 from src.openaq.location_finder import LocationFinder
 from src.openaq.data_downloader import DataDownloader
-from src.openaq.incremental_downloader import IncrementalDownloader
+from src.openaq.incremental_downloader_all import IncrementalDownloaderAll
 from src.core.data_storage import DataStorage
 from src.utils.data_analyzer import analyze_dataset
 
@@ -84,7 +84,11 @@ Examples:
     if not args.country:
         parser.error("--country is required")
     
-    if args.days:
+    if args.country_wide:
+        # For country-wide mode, we don't need dates since we download all data
+        start_date = None
+        end_date = None
+    elif args.days:
         from datetime import timedelta
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=args.days)
@@ -92,7 +96,7 @@ Examples:
         start_date = args.start
         end_date = args.end
     else:
-        parser.error("Specify either --start/--end or --days")
+        parser.error("Specify either --start/--end, --days, or use --country-wide")
     
     country_id, country_name = get_country_id(client, args.country)
     if not country_id:
@@ -102,20 +106,20 @@ Examples:
     
     print(f"\n=== Air Quality Data Download ===")
     print(f"Country: {country_name} ({args.country.upper()})")
-    print(f"Date range: {start_date.date()} to {end_date.date()}")
     print(f"Parameters: {args.parameters or 'all'}")
     
     if args.country_wide:
-        print(f"\nMode: INCREMENTAL COUNTRY-WIDE")
-        print("Data saves after each location - safe to interrupt!")
+        print(f"\nMode: DOWNLOAD ALL DATA (no date filtering)")
+        print("Fetching ALL available measurements from each sensor")
+        print("Data saves after each sensor - safe to interrupt!")
         
         params = None
         if args.parameters:
             params = [p.strip().lower() for p in args.parameters.split(',')]
             
-        downloader = IncrementalDownloader(client)
-        output_path = downloader.download_country_incremental(
-            args.country.upper(), country_id, start_date, end_date, 
+        downloader = IncrementalDownloaderAll(client)
+        output_path = downloader.download_country_all(
+            args.country.upper(), country_id,
             params, max_locations=args.max_locations, resume=True
         )
         
