@@ -170,3 +170,5 @@ geckodriver
 
 # Redis
 dump.rdb
+
+CLAUDE.md
