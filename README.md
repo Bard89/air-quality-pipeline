@@ -99,7 +99,7 @@ pip install -r requirements.txt
 
 Data is saved to `data/openaq/processed/{country}_airquality_{startdate}_{enddate}.csv`
 
-### CSV Format
+### CSV Format (Long Format)
 - `datetime`: UTC timestamp
 - `value`: Measurement value
 - `sensor_id`: Unique sensor identifier
@@ -109,6 +109,22 @@ Data is saved to `data/openaq/processed/{country}_airquality_{startdate}_{enddat
 - `parameter`: Pollutant type
 - `unit`: Measurement unit
 - `city`, `country`: Geographic info
+
+### Convert to Wide Format
+
+Transform data to have one row per location/hour with all parameters as columns:
+
+```bash
+# Convert while download is running
+python3 transform_to_wide.py data/openaq/processed/in_airquality_20240101_20241231.csv
+
+# Creates: in_airquality_20240101_20241231_wide.csv
+```
+
+**Wide Format Columns:**
+- `datetime`: Hourly timestamp
+- `location_id`, `location_name`, `latitude`, `longitude`: Location info
+- Parameter columns with units: `pm25_µg/m³`, `pm10_µg/m³`, `co_µg/m³`, `no2_µg/m³`, `o3_ppm`, `so2_µg/m³`, `temperature_c`, `relativehumidity_%`, etc.
 
 ### Automatic Analysis
 Each download includes:
@@ -140,6 +156,15 @@ Each download includes:
 ```python
 from src.utils.data_analyzer import analyze_dataset
 analyze_dataset('data/openaq/processed/india_airquality_20240101_20241231.csv')
+```
+
+### Transform Data Format
+```bash
+# Convert long format to wide format (one row per location/hour)
+python3 transform_to_wide.py data/openaq/processed/india_airquality_20240101_20241231.csv
+
+# For very large files (>500MB), use the memory-efficient version
+python3 src/utils/csv_to_wide_format.py data/openaq/processed/india_airquality_20240101_20241231.csv
 ```
 
 ### High-Pollution Countries
