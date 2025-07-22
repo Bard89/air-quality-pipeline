@@ -1,9 +1,11 @@
-from datetime import datetime
-from typing import List, Dict, Optional
-import pandas as pd
-import time
 import json
+import time
+from datetime import datetime
 from pathlib import Path
+from typing import Dict, List, Optional
+
+import pandas as pd
+
 from src.openaq.client import OpenAQClient
 
 
@@ -45,13 +47,12 @@ class IncrementalDownloaderAll:
             df.to_csv(output_path, index=False)
     
     def fetch_all_sensor_data(self, sensor_id: int, max_pages: int = 1000) -> List[Dict]:
-        """Fetch ALL data from a sensor without any filtering"""
         all_data = []
         page = 1
         total_fetched = 0
         sensor_start_time = time.time()
         
-        print(f"      Fetching ALL available data...")
+        print("      Fetching ALL available data...")
         
         while page <= max_pages:
             try:
@@ -83,12 +84,11 @@ class IncrementalDownloaderAll:
                         })
                 
                 if page % 5 == 0:
-                    elapsed = time.time() - sensor_start_time if 'sensor_start_time' in locals() else 0
+                    elapsed = time.time() - sensor_start_time
                     print(f"\r      Page {page}: {total_fetched} measurements fetched ({elapsed:.1f}s)", end='', flush=True)
                 
-                meta = response.get('meta', {})
                 if page_total < 1000:
-                    print(f"\n      Reached end of data")
+                    print("\n      Reached end of data")
                     break
                 
                 page += 1
@@ -145,7 +145,6 @@ class IncrementalDownloaderAll:
                         'unit': item['parameter'].get('units')
                     })
                 
-                # Create DataFrame and save
                 df = pd.DataFrame(sensor_data)
                 df['datetime'] = pd.to_datetime(df['datetime'])
                 df = df.drop_duplicates(subset=['datetime', 'sensor_id', 'parameter'])
@@ -156,13 +155,12 @@ class IncrementalDownloaderAll:
                 total_measurements += sensor_measurements
                 print(f"      ✓ Saved {sensor_measurements} measurements")
                 
-                # Show date range of saved data
                 if not df.empty:
                     date_min = df['datetime'].min()
                     date_max = df['datetime'].max()
                     print(f"      Date range: {date_min.strftime('%Y-%m-%d %H:%M')} to {date_max.strftime('%Y-%m-%d %H:%M')}")
             else:
-                print(f"      ✗ No data found")
+                print("      ✗ No data found")
         
         return total_measurements
     
@@ -170,7 +168,6 @@ class IncrementalDownloaderAll:
                            parameters: Optional[List[str]] = None,
                            max_locations: Optional[int] = None,
                            resume: bool = True) -> str:
-        """Download ALL data from country without date filtering"""
         
         checkpoint = None
         completed_locations = []
@@ -220,10 +217,7 @@ class IncrementalDownloaderAll:
         
         print(f"Found {len(all_locations)} locations")
         
-        # Get active locations (those not already completed)
         active_locations = [loc for loc in all_locations if loc['id'] not in completed_locations]
-        
-        # Sort by number of sensors (download larger locations first)
         active_locations.sort(key=lambda x: len(x.get('sensors', [])), reverse=True)
         
         if max_locations and len(active_locations) > max_locations:
@@ -233,7 +227,7 @@ class IncrementalDownloaderAll:
         print(f"Locations to download: {len(active_locations)}")
         print(f"Already completed: {len(completed_locations)}")
         
-        print(f"\nDownloading ALL AVAILABLE DATA (no date filtering)")
+        print("\nDownloading ALL AVAILABLE DATA (no date filtering)")
         print(f"Data will be saved to: {output_path}")
         print("Data is saved after EACH SENSOR completes")
         print("You can safely interrupt and resume later")
@@ -254,30 +248,28 @@ class IncrementalDownloaderAll:
             location_start = time.time()
             
             try:
-                # Save checkpoint before processing
                 self.save_checkpoint(country_code, i, total_locations, completed_locations, 
                                    str(output_path), loc_id, current_sensor_index)
                 
-                # Process location
                 loc_measurements = self.download_location_sensors_all(
                     location, output_path, parameters, current_sensor_index
                 )
                 
                 total_measurements += loc_measurements
-                current_sensor_index = 0  # Reset for next location
+                current_sensor_index = 0
                 
                 if loc_measurements > 0:
                     print(f"  ✓ Location complete: {loc_measurements:,} measurements in {time.time()-location_start:.1f}s")
                 else:
-                    print(f"  ✗ No data found")
+                    print("  ✗ No data found")
                     
             except KeyboardInterrupt:
                 print("\n\nInterrupted! All completed sensor data has been saved.")
-                print(f"Resume by running the same command again.")
+                print("Resume by running the same command again.")
                 raise
             except Exception as e:
                 print(f"  ✗ Error processing location: {str(e)}")
-                print(f"  Skipping to next location...")
+                print("  Skipping to next location...")
                 current_sensor_index = 0
                 
             completed_locations.append(loc_id)
@@ -289,13 +281,11 @@ class IncrementalDownloaderAll:
                 remaining = len(active_locations) - i - 1
                 eta = remaining / rate if rate > 0 else 0
                 
-                # Format elapsed time
                 elapsed_hours = int(elapsed // 3600)
                 elapsed_minutes = int((elapsed % 3600) // 60)
                 elapsed_seconds = int(elapsed % 60)
                 elapsed_str = f"{elapsed_hours}h {elapsed_minutes}m {elapsed_seconds}s" if elapsed_hours > 0 else f"{elapsed_minutes}m {elapsed_seconds}s"
                 
-                # Format ETA
                 eta_hours = int(eta // 3600)
                 eta_minutes = int((eta % 3600) // 60)
                 eta_str = f"{eta_hours}h {eta_minutes}m" if eta_hours > 0 else f"{eta_minutes}m"
@@ -313,13 +303,14 @@ class IncrementalDownloaderAll:
         total_seconds = int(total_elapsed % 60)
         
         print(f"\n{'='*60}")
-        print(f"DOWNLOAD COMPLETE")
+        print("DOWNLOAD COMPLETE")
         if total_hours > 0:
             print(f"Total time: {total_hours}h {total_minutes}m {total_seconds}s")
         else:
             print(f"Total time: {total_minutes}m {total_seconds}s")
         print(f"Total measurements: {total_measurements:,}")
-        print(f"Average rate: {total_measurements/total_elapsed:.0f} measurements/second") if total_elapsed > 0 else None
+        if total_elapsed > 0:
+            print(f"Average rate: {total_measurements/total_elapsed:.0f} measurements/second")
         print(f"Output file: {output_path}")
         print(f"{'='*60}")
         

@@ -2,15 +2,16 @@
 import argparse
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
 from dotenv import load_dotenv
 
+from src.core.data_storage import DataStorage
 from src.openaq.client import OpenAQClient
-from src.openaq.location_finder import LocationFinder
 from src.openaq.data_downloader import DataDownloader
 from src.openaq.incremental_downloader_all import IncrementalDownloaderAll
 from src.openaq.incremental_downloader_parallel import IncrementalDownloaderParallel
-from src.core.data_storage import DataStorage
+from src.openaq.location_finder import LocationFinder
 from src.utils.data_analyzer import analyze_dataset
 
 
@@ -59,9 +60,9 @@ Examples:
     parser.add_argument('--analyze', '-a', action='store_true', default=True,
                        help='Analyze data after download (default: True)')
     parser.add_argument('--country-wide', action='store_true',
-                       help='Download ALL data from country (day-by-day, most efficient for full country)')
+                       help='Download ALL data from country')
     parser.add_argument('--max-locations', type=int,
-                       help='Maximum number of locations to download (for --country-wide mode)')
+                       help='Maximum number of locations (--country-wide only)')
     parser.add_argument('--parallel', action='store_true',
                        help='Use parallel API calls for faster downloads (requires multiple API keys)')
     
@@ -70,7 +71,6 @@ Examples:
     load_dotenv()
     
     api_keys = []
-    
     for i in range(1, 101):
         key = os.getenv(f'OPENAQ_API_KEY_{i:02d}')
         if key:
@@ -108,11 +108,9 @@ Examples:
         parser.error("--country is required")
     
     if args.country_wide:
-        # For country-wide mode, we don't need dates since we download all data
         start_date = None
         end_date = None
     elif args.days:
-        from datetime import timedelta
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=args.days)
     elif args.start and args.end:
@@ -136,9 +134,7 @@ Examples:
         print("Fetching ALL available measurements from each sensor")
         print("Data saves after each sensor - safe to interrupt!")
         
-        params = None
-        if args.parameters:
-            params = [p.strip().lower() for p in args.parameters.split(',')]
+        params = [p.strip().lower() for p in args.parameters.split(',')] if args.parameters else None
             
         if use_parallel:
             downloader = IncrementalDownloaderParallel(client)
@@ -206,7 +202,6 @@ Examples:
         print("\nNo active sensors found!")
         sys.exit(1)
     
-    # Apply sensor limit if specified
     if args.limit_sensors:
         limited_sensors = []
         for param in param_counts:
@@ -216,8 +211,8 @@ Examples:
         print(f"\nLimited to {len(active_sensors)} sensors")
     
     days = (end_date - start_date).days
-    estimated_requests = len(active_sensors) * ((days + 89) // 90)  # 90-day chunks
-    estimated_time = estimated_requests * 1.05 / 60  # 1.05s per request
+    estimated_requests = len(active_sensors) * ((days + 89) // 90)
+    estimated_time = estimated_requests * 1.05 / 60
     
     if estimated_time > 60:
         print(f"\n⚠️  WARNING: This download will make ~{estimated_requests:,} API requests")
@@ -247,7 +242,7 @@ Examples:
     df.to_csv(output_path, index=False)
     
     print(f"\n{'='*60}")
-    print(f"DOWNLOAD COMPLETE")
+    print("DOWNLOAD COMPLETE")
     print(f"Saved {len(df):,} measurements to:")
     print(f"{output_path}")
     print(f"{'='*60}")
