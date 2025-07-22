@@ -41,7 +41,8 @@ class ParallelAPIClient:
             headers = {'X-API-Key': self.api_keys[key_index]}
 
             try:
-                async with session.get(url, params=params, headers=headers) as response:
+                timeout = aiohttp.ClientTimeout(total=30)
+                async with session.get(url, params=params, headers=headers, timeout=timeout) as response:
                     self.last_request_times[key_index] = time.time()
                     self.request_counts[key_index] += 1
                     self.total_requests += 1
@@ -59,13 +60,17 @@ class ParallelAPIClient:
                     response.raise_for_status()
                     return await response.json(), key_index
 
+            except asyncio.TimeoutError:
+                self.error_counts[key_index] += 1
+                raise aiohttp.ClientTimeout(f"Request timeout on key {key_index}")
             except Exception:
                 self.error_counts[key_index] += 1
                 raise
 
     async def get_single(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
         """Make a single request using the least recently used key"""
-        async with aiohttp.ClientSession() as session:
+        connector = aiohttp.TCPConnector(limit=100, limit_per_host=30)
+        async with aiohttp.ClientSession(connector=connector) as session:
             # Find the key that was used longest ago
             key_index = min(range(self.num_keys),
                           key=lambda i: self.last_request_times[i])
@@ -77,7 +82,8 @@ class ParallelAPIClient:
         """Make multiple requests in parallel using all available keys"""
         results = []
 
-        async with aiohttp.ClientSession() as session:
+        connector = aiohttp.TCPConnector(limit=100, limit_per_host=30)
+        async with aiohttp.ClientSession(connector=connector) as session:
             # Create tasks for all requests
             tasks = []
             for i, (endpoint, params) in enumerate(requests):
@@ -85,8 +91,15 @@ class ParallelAPIClient:
                 task = self._get_with_key(session, key_index, endpoint, params)
                 tasks.append(task)
 
-            # Execute all tasks in parallel
-            responses = await asyncio.gather(*tasks, return_exceptions=True)
+            # Execute all tasks in parallel with limited concurrency
+            semaphore = asyncio.Semaphore(self.num_keys * 2)
+            
+            async def bounded_task(task):
+                async with semaphore:
+                    return await task
+            
+            bounded_tasks = [bounded_task(task) for task in tasks]
+            responses = await asyncio.gather(*bounded_tasks, return_exceptions=True)
 
             # Process results
             for response in responses:
