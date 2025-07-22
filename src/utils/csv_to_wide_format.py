@@ -4,51 +4,40 @@ import sys
 
 import pandas as pd
 def convert_to_wide_format(input_csv: str, output_csv: str = None):
-    """Convert OpenAQ long format CSV to wide format with all parameters as columns"""
 
     print(f"Reading {input_csv}...")
     df = pd.read_csv(input_csv)
 
-    # Convert datetime to pandas datetime
     df['datetime'] = pd.to_datetime(df['datetime'])
-
-    # Round datetime to nearest hour (OpenAQ data is typically hourly)
     df['datetime_hour'] = df['datetime'].dt.round('H')
 
     print(f"Original shape: {df.shape}")
     print(f"Unique locations: {df['location_id'].nunique()}")
     print(f"Parameters: {sorted(df['parameter'].unique())}")
 
-    # Create parameter columns with units
     df['param_with_unit'] = df['parameter'] + '_' + df['unit']
 
-    # Pivot the data
     print("\nConverting to wide format...")
     wide_df = df.pivot_table(
         index=['datetime_hour', 'location_id', 'location_name', 'city', 'country', 'latitude', 'longitude'],
         columns='param_with_unit',
         values='value',
-        aggfunc='mean'  # Average if multiple measurements in same hour
+        aggfunc='mean'
     ).reset_index()
 
-    # Rename datetime column
     wide_df.rename(columns={'datetime_hour': 'datetime'}, inplace=True)
 
-    # Sort by location and time
     wide_df.sort_values(['location_id', 'datetime'], inplace=True)
 
-    # Generate output filename if not provided
     if not output_csv:
         input_path = Path(input_csv)
         output_csv = str(input_path.parent / f"{input_path.stem}_wide.csv")
 
-    # Save to CSV
     wide_df.to_csv(output_csv, index=False)
 
     print(f"\nWide format shape: {wide_df.shape}")
     print(f"Saved to: {output_csv}")
 
-    # Show sample of columns
     print("\nColumns in wide format:")
     for col in wide_df.columns[:15]:
         print(f"  - {col}")
@@ -59,7 +48,6 @@ def convert_to_wide_format(input_csv: str, output_csv: str = None):
 
 
 def convert_incremental(input_csv: str, output_csv: str = None):
-    """Convert with minimal memory usage for large files"""
 
     if not output_csv:
         input_path = Path(input_csv)
@@ -67,7 +55,6 @@ def convert_incremental(input_csv: str, output_csv: str = None):
 
     print(f"Processing {input_csv} incrementally...")
 
-    # First pass: get unique parameters and their units
     params_units = set()
     for chunk in pd.read_csv(input_csv, chunksize=100000):
         chunk['param_with_unit'] = chunk['parameter'] + '_' + chunk['unit']
@@ -76,7 +63,6 @@ def convert_incremental(input_csv: str, output_csv: str = None):
     params_units = sorted(list(params_units))
     print(f"Found {len(params_units)} parameter-unit combinations")
 
-    # Process by location
     location_ids = []
     for chunk in pd.read_csv(input_csv, chunksize=100000):
         location_ids.extend(chunk['location_id'].unique())
@@ -84,12 +70,10 @@ def convert_incremental(input_csv: str, output_csv: str = None):
 
     print(f"Found {len(location_ids)} unique locations")
 
-    # Process each location separately
     first_location = True
     for i, loc_id in enumerate(location_ids):
         print(f"\rProcessing location {i+1}/{len(location_ids)}", end='', flush=True)
 
-        # Read only data for this location
         loc_data = []
         for chunk in pd.read_csv(input_csv, chunksize=100000):
             loc_chunk = chunk[chunk['location_id'] == loc_id]
@@ -101,7 +85,6 @@ def convert_incremental(input_csv: str, output_csv: str = None):
 
         loc_df = pd.concat(loc_data, ignore_index=True)
 
-        # Convert to wide format
         loc_df['datetime'] = pd.to_datetime(loc_df['datetime'])
         loc_df['datetime_hour'] = loc_df['datetime'].dt.round('H')
         loc_df['param_with_unit'] = loc_df['parameter'] + '_' + loc_df['unit']
@@ -115,7 +98,6 @@ def convert_incremental(input_csv: str, output_csv: str = None):
 
         wide_loc.rename(columns={'datetime_hour': 'datetime'}, inplace=True)
 
-        # Save
         if first_location:
             wide_loc.to_csv(output_csv, index=False)
             first_location = False
@@ -136,10 +118,9 @@ if __name__ == "__main__":
     input_file = sys.argv[1]
     output_file = sys.argv[2] if len(sys.argv) > 2 else None
 
-    # Check file size
     file_size_mb = Path(input_file).stat().st_size / (1024 * 1024)
 
-    if file_size_mb > 500:  # If larger than 500MB, use incremental processing
+    if file_size_mb > 500:
         convert_incremental(input_file, output_file)
     else:
         convert_to_wide_format(input_file, output_file)
