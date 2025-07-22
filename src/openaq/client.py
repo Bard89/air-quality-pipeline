@@ -35,6 +35,23 @@ class OpenAQClient:
         }
         return self.api.get(f'/sensors/{sensor_id}/measurements', params)
     
+    def get_measurements(self, date_from: str, date_to: str, location_ids: Optional[List[int]] = None,
+                        sensor_ids: Optional[List[int]] = None, parameters: Optional[List[str]] = None,
+                        limit: int = 1000, page: int = 1) -> Dict:
+        params = {
+            'date_from': date_from,
+            'date_to': date_to,
+            'limit': limit,
+            'page': page
+        }
+        if location_ids:
+            params['locations_id'] = ','.join(map(str, location_ids))
+        if sensor_ids:
+            params['sensors_id'] = ','.join(map(str, sensor_ids))
+        if parameters:
+            params['parameters_name'] = ','.join(parameters)
+        return self.api.get('/measurements', params)
+    
     def get_latest_measurements(self, location_id: int) -> Dict:
         return self.api.get(f'/locations/{location_id}/latest')
     

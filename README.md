@@ -39,6 +39,18 @@ pip install -r requirements.txt
 
 # Limit sensors for faster downloads
 ./download_air_quality.py --country TH --days 7 --parameters pm25 --limit-sensors 10
+
+# Smart mode: Auto-select best locations (minimal API requests)
+./download_air_quality.py --country IN --days 30 --parameters pm25 --smart
+
+# Download full year efficiently with smart mode
+./download_air_quality.py --country CN --start 2024-01-01 --end 2024-12-31 --smart
+
+# Download entire country data efficiently
+./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 --country-wide --max-locations 100
+
+# Download all PM2.5 data from top 50 locations
+./download_air_quality.py --country IN --days 365 --parameters pm25 --country-wide --max-locations 50
 ```
 
 ### Command Options
@@ -50,6 +62,9 @@ pip install -r requirements.txt
 - `--parameters, -p`: Comma-separated parameters (see available parameters below)
 - `--limit-sensors, -l`: Limit sensors per parameter
 - `--analyze, -a`: Auto-analyze after download (default: true)
+- `--smart`: Smart mode - auto-selects best locations for data quality and minimal API usage
+- `--country-wide`: Download all data from a country efficiently (best for large datasets)
+- `--max-locations`: Limit number of locations (use with --country-wide)
 
 ### Available Parameters
 
@@ -135,10 +150,74 @@ Recommended countries with extensive sensor networks:
 
 ## Performance
 
+### Download Strategies
+
+#### Country-Wide Mode (Best for Full Country)
+Use `--country-wide` to download all data from a country efficiently:
+- **Incremental saving**: Data saved after each location completes
+- **Safe to interrupt**: Automatic checkpoint/resume capability
+- **No data loss**: Even if API blocks you, completed data is safe
+- Respects rate limits (60 req/min, 2000 req/hour)
+- Use `--max-locations` to limit scope
+- Processes sensor by sensor with 90-day chunks
+
+**Example for full country:**
+```bash
+# Download all India PM2.5 data from top 100 locations
+./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 \
+  --parameters pm25 --country-wide --max-locations 100
+
+# Download EVERYTHING from India (safe to interrupt)
+./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 --country-wide
+
+# If interrupted, just run the same command again - it will resume automatically!
+```
+
+**How to Safely Interrupt & Resume:**
+1. **To interrupt**: Press `Ctrl+C` anytime - data already downloaded is safe
+2. **To resume**: Run the EXACT same command again
+3. **Progress saved**: Checkpoint file tracks completed locations
+4. **No duplicates**: Resume skips already downloaded locations
+
+**Example:**
+```bash
+# Start download (might take hours)
+./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 --country-wide
+
+# Press Ctrl+C after 2 hours...
+# Later, resume with same command:
+./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 --country-wide
+# Output: "Resuming from checkpoint (location 150/500)"
+```
+
+#### Smart Mode (Best for Quick Analysis)
+The `--smart` flag auto-selects best locations for data quality
+
+**API Request Comparison:**
+| Mode | Scope | API Requests | Time |
+|------|-------|--------------|------|
+| Standard | 500 locations, 1 year | ~24,000 | 10+ hours |
+| Country-wide | 100 locations, 1 year | ~400 | ~10 minutes |
+| Smart | 20 locations, 1 year | ~100 | ~3 minutes |
+
+### Tips for Minimal API Usage
+
+```bash
+# For large datasets, always use --smart
+./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 --smart
+
+# Combine with parameter filtering
+./download_air_quality.py --country CN --days 365 --parameters pm25,pm10 --smart
+
+# For testing, limit sensors
+./download_air_quality.py --country US --days 7 --limit-sensors 5
+```
+
+### General Performance
+
 - Rate limited to 60 requests/minute
-- Downloads in parallel where possible
-- Use `--limit-sensors` for testing
-- Full country downloads may take hours
+- Smart mode typically completes in minutes instead of hours
+- Shows time estimates before downloading
 
 ## License
 
