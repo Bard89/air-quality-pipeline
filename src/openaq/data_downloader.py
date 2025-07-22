@@ -10,7 +10,7 @@ class DataDownloader:
         self.client = client
     
     def download_sensor_data(self, sensor_id: int, start_date: datetime, 
-                           end_date: datetime, chunk_days: int = 30) -> List[Dict]:
+                           end_date: datetime, chunk_days: int = 90) -> List[Dict]:
         all_measurements = []
         current_date = start_date
         total_days = (end_date - start_date).days
@@ -74,6 +74,91 @@ class DataDownloader:
         
         return df
     
+    def download_batch_measurements(self, location_ids: List[int], start_date: datetime,
+                                   end_date: datetime, parameters: Optional[List[str]] = None) -> pd.DataFrame:
+        """Download measurements for multiple locations in batch requests"""
+        all_data = []
+        chunk_days = 90
+        current_date = start_date
+        
+        print(f"Batch downloading from {len(location_ids)} locations")
+        print(f"Date range: {(end_date - start_date).days} days")
+        
+        while current_date < end_date:
+            chunk_end = min(current_date + timedelta(days=chunk_days), end_date)
+            print(f"\nPeriod: {current_date.date()} to {chunk_end.date()}")
+            
+            # Batch locations into groups of 10 to avoid URL length limits
+            for i in range(0, len(location_ids), 10):
+                batch_ids = location_ids[i:i+10]
+                page = 1
+                total_measurements = 0
+                
+                while True:
+                    try:
+                        response = self.client.get_measurements(
+                            date_from=current_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                            date_to=chunk_end.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                            location_ids=batch_ids,
+                            parameters=parameters,
+                            limit=1000,
+                            page=page
+                        )
+                        
+                        measurements = response.get('results', [])
+                        if not measurements:
+                            break
+                        
+                        # Process measurements
+                        for m in measurements:
+                            period = m.get('period', {})
+                            datetime_from = period.get('datetimeFrom', {})
+                            location = m.get('location', {})
+                            parameter = m.get('parameter', {})
+                            coords = m.get('coordinates', {})
+                            
+                            if datetime_from.get('utc') and m.get('value') is not None:
+                                all_data.append({
+                                    'datetime': datetime_from.get('utc'),
+                                    'value': float(m.get('value')),
+                                    'sensor_id': m.get('sensor', {}).get('id'),
+                                    'location_id': location.get('id'),
+                                    'location_name': location.get('name'),
+                                    'city': location.get('locality'),
+                                    'country': location.get('country'),
+                                    'latitude': coords.get('latitude'),
+                                    'longitude': coords.get('longitude'),
+                                    'parameter': parameter.get('name'),
+                                    'unit': parameter.get('units')
+                                })
+                        
+                        total_measurements += len(measurements)
+                        
+                        # Check if more pages
+                        meta = response.get('meta', {})
+                        if meta.get('found', 0) <= page * 1000:
+                            break
+                        
+                        page += 1
+                        
+                    except Exception as e:
+                        print(f"Error in batch request: {e}")
+                        break
+                
+                if total_measurements > 0:
+                    print(f"  Batch {i//10 + 1}: {total_measurements} measurements from {len(batch_ids)} locations")
+            
+            current_date = chunk_end
+        
+        if all_data:
+            df = pd.DataFrame(all_data)
+            df['datetime'] = pd.to_datetime(df['datetime'])
+            df = df.drop_duplicates(subset=['datetime', 'sensor_id', 'parameter'])
+            df = df.sort_values(['datetime', 'location_id'])
+            return df
+        
+        return pd.DataFrame()
+    
     def download_multiple_sensors(self, sensors: List[Dict], start_date: datetime, 
                                  end_date: datetime) -> pd.DataFrame:
         all_data = []
@@ -112,7 +197,6 @@ class DataDownloader:
                 else:
                     print("✗ No data available")
                 
-                # Estimate remaining time
                 sensors_done = sum(len(pg) for pg_name, pg in param_groups.items() 
                                  if pg_name < param or (pg_name == param and param_sensors.index(sensor) < i))
                 sensors_done += i + 1
