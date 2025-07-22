@@ -22,42 +22,27 @@ pip install -r requirements.txt
 # List available countries
 ./download_air_quality.py --list-countries
 
-# Download full year from India
-./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31
+# Download ALL data from India (no date filtering)
+./download_air_quality.py --country IN --country-wide
 
-# Download last 30 days from Japan
-./download_air_quality.py --country JP --days 30
+# Download with specific parameters
+./download_air_quality.py --country US --parameters pm25,pm10,no2 --country-wide
 
-# Download specific parameters from USA
-./download_air_quality.py --country US --days 90 --parameters pm25,pm10,no2
-
-# Download all particulate matter data
-./download_air_quality.py --country DE --days 30 --parameters pm1,pm25,pm10
-
-# Download air quality + weather data
-./download_air_quality.py --country JP --days 7 --parameters pm25,temperature,relativehumidity
-
-# Limit sensors for faster downloads
-./download_air_quality.py --country TH --days 7 --parameters pm25 --limit-sensors 10
-
-# Download entire country data efficiently
-./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 --country-wide --max-locations 100
+# Limit to top 100 locations for faster downloads
+./download_air_quality.py --country IN --country-wide --max-locations 100
 
 # Download all PM2.5 data from top 50 locations
-./download_air_quality.py --country IN --days 365 --parameters pm25 --country-wide --max-locations 50
+./download_air_quality.py --country IN --parameters pm25 --country-wide --max-locations 50
 ```
 
 ### Command Options
 
 - `--country, -c`: Country code (e.g., US, IN, JP, TH)
-- `--start, -s`: Start date (YYYY-MM-DD)
-- `--end, -e`: End date (YYYY-MM-DD)
-- `--days, -d`: Alternative: download last N days
 - `--parameters, -p`: Comma-separated parameters (see available parameters below)
-- `--limit-sensors, -l`: Limit sensors per parameter
-- `--analyze, -a`: Auto-analyze after download (default: true)
-- `--country-wide`: Download all data from a country efficiently (best for large datasets)
+- `--country-wide`: Download ALL available data from a country (no date filtering)
 - `--max-locations`: Limit number of locations (use with --country-wide)
+- `--analyze, -a`: Auto-analyze after download (default: true)
+- `--list-countries`: List all available countries
 
 ### Available Parameters
 
@@ -90,7 +75,9 @@ pip install -r requirements.txt
 
 ## Output
 
-Data is saved to `data/openaq/processed/{country}_airquality_{startdate}_{enddate}.csv`
+Data is saved to `data/openaq/processed/{country}_airquality_all_{timestamp}.csv`
+
+**Note**: Due to OpenAQ API limitations, the tool now downloads ALL available data from sensors without date filtering. The API ignores date parameters and returns data starting from the oldest available measurements.
 
 ### CSV Format (Long Format)
 - `datetime`: UTC timestamp
@@ -108,10 +95,10 @@ Data is saved to `data/openaq/processed/{country}_airquality_{startdate}_{enddat
 Transform data to have one row per location/hour with all parameters as columns:
 
 ```bash
-# Convert while download is running
-python3 transform_to_wide.py data/openaq/processed/in_airquality_20240101_20241231.csv
+# Convert downloaded data
+python3 transform_to_wide.py data/openaq/processed/in_airquality_all_20241215_123045.csv
 
-# Creates: in_airquality_20240101_20241231_wide.csv
+# Creates: in_airquality_all_20241215_123045_wide.csv
 ```
 
 **Wide Format Columns:**
@@ -137,7 +124,8 @@ Each download includes:
 │   ├── openaq/              # OpenAQ-specific modules
 │   │   ├── client.py        # API wrapper
 │   │   ├── location_finder.py
-│   │   └── data_downloader.py
+│   │   ├── data_downloader.py
+│   │   └── incremental_downloader_all.py  # Downloads all sensor data
 │   └── utils/
 │       └── data_analyzer.py # Data analysis
 └── data/                    # Downloaded data (gitignored)
@@ -148,16 +136,13 @@ Each download includes:
 ### Re-analyze Existing Data
 ```python
 from src.utils.data_analyzer import analyze_dataset
-analyze_dataset('data/openaq/processed/india_airquality_20240101_20241231.csv')
+analyze_dataset('data/openaq/processed/in_airquality_all_20241215_123045.csv')
 ```
 
 ### Transform Data Format
 ```bash
 # Convert long format to wide format (one row per location/hour)
-python3 transform_to_wide.py data/openaq/processed/india_airquality_20240101_20241231.csv
-
-# For very large files (>500MB), use the memory-efficient version
-python3 src/utils/csv_to_wide_format.py data/openaq/processed/india_airquality_20240101_20241231.csv
+python3 transform_to_wide.py data/openaq/processed/in_airquality_all_20241215_123045.csv
 ```
 
 ### High-Pollution Countries
@@ -170,23 +155,22 @@ Recommended countries with extensive sensor networks:
 
 ### Download Strategies
 
-#### Country-Wide Mode (Best for Full Country)
-Use `--country-wide` to download all data from a country efficiently:
-- **Incremental saving**: Data saved after each location completes
+#### Country-Wide Mode (Downloads ALL Available Data)
+Use `--country-wide` to download all historical data from a country:
+- **No date filtering**: Downloads ALL available measurements from each sensor
+- **Incremental saving**: Data saved after each sensor completes
 - **Safe to interrupt**: Automatic checkpoint/resume capability
 - **No data loss**: Even if API blocks you, completed data is safe
-- Respects rate limits (60 req/min, 2000 req/hour)
+- Respects rate limits (60 req/min)
 - Use `--max-locations` to limit scope
-- Processes sensor by sensor with 90-day chunks
 
 **Example for full country:**
 ```bash
-# Download all India PM2.5 data from top 100 locations
-./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 \
-  --parameters pm25 --country-wide --max-locations 100
+# Download ALL PM2.5 data from top 100 locations in India
+./download_air_quality.py --country IN --parameters pm25 --country-wide --max-locations 100
 
 # Download EVERYTHING from India (safe to interrupt)
-./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 --country-wide
+./download_air_quality.py --country IN --country-wide
 
 # If interrupted, just run the same command again - it will resume automatically!
 ```
@@ -200,39 +184,35 @@ Use `--country-wide` to download all data from a country efficiently:
 **Example:**
 ```bash
 # Start download (might take hours)
-./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 --country-wide
+./download_air_quality.py --country IN --country-wide
 
 # Press Ctrl+C after 2 hours...
 # Later, resume with same command:
-./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 --country-wide
+./download_air_quality.py --country IN --country-wide
 # Output: "Resuming from checkpoint (location 150/500)"
 ```
 
-**API Request Comparison:**
-| Mode | Scope | API Requests | Time |
-|------|-------|--------------|------|
-| Standard | 500 locations, 1 year | ~24,000 | 10+ hours |
-| Country-wide | 100 locations, 1 year | ~5,000 | ~90 minutes |
-| Country-wide | 50 locations, 1 year | ~2,500 | ~45 minutes |
+**Important Note:**
+The tool downloads ALL available historical data from each sensor because the OpenAQ API v3 has a limitation where it ignores date filtering parameters and returns data starting from the oldest available measurements.
 
-### Tips for Minimal API Usage
+### Tips for Efficient Downloads
 
 ```bash
-# For large datasets, always use --country-wide
-./download_air_quality.py --country IN --start 2024-01-01 --end 2024-12-31 --country-wide
+# Always use --country-wide for bulk downloads
+./download_air_quality.py --country IN --country-wide
 
-# Combine with parameter filtering
-./download_air_quality.py --country CN --days 365 --parameters pm25,pm10 --country-wide --max-locations 100
+# Combine with parameter filtering to reduce data size
+./download_air_quality.py --country CN --parameters pm25,pm10 --country-wide --max-locations 100
 
-# For testing, limit sensors
-./download_air_quality.py --country US --days 7 --limit-sensors 5
+# For testing, limit locations
+./download_air_quality.py --country US --country-wide --max-locations 10
 ```
 
 ### General Performance
 
 - Rate limited to 60 requests/minute (1.05s delay between requests)
-- Shows time estimates before downloading
-- Data saved incrementally (safe from interruptions)
+- Data saved incrementally after each sensor completes (safe from interruptions)
+- Downloads ALL historical data from each sensor (no date filtering)
 
 ## License
 
