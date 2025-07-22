@@ -51,14 +51,11 @@ class IncrementalDownloaderAll:
         sensor_start_time = time.time()
 
         print("      Fetching ALL available data...")
+        
+        # API has a hard limit at page 16 (max 16,000 measurements per sensor)
+        max_pages = min(max_pages, 16)
 
         while page <= max_pages:
-            # Skip pages 17-18 due to consistent API timeouts
-            if page in [17, 18]:
-                print(f"\n      Skipping page {page} (known timeout issue)...")
-                page += 1
-                continue
-                
             try:
                 params = {
                     'limit': 1000,
@@ -99,15 +96,11 @@ class IncrementalDownloaderAll:
 
             except Exception as e:
                 error_msg = str(e)[:100]
-                
-                # For page 16, skip to 19 if timeout (since 17-18 also timeout)
-                if page == 16 and ('408' in error_msg or 'timeout' in error_msg.lower()):
-                    print(f"\n      Timeout on page {page}, skipping to page 19...")
-                    page = 19
-                    continue
                     
                 if ('408' in error_msg or 'timeout' in error_msg.lower()) and page > 1:
                     print(f"\n      Timeout on page {page}, stopping...")
+                    if page >= 16:
+                        print(f"      Note: API has a hard limit at page 16")
                 else:
                     print(f"\n      Error on page {page}: {error_msg}")
                 break

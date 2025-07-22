@@ -56,6 +56,10 @@ class IncrementalDownloaderParallel:
     def fetch_sensor_pages_parallel_sync(self, sensor_ids: List[int], max_pages_per_sensor: int = 100) -> Dict[int, List]:
         all_requests = []
         request_map = {}
+        
+        # API has a hard limit at page 16 (max 16,000 measurements per sensor)
+        max_pages_per_sensor = min(max_pages_per_sensor, 16)
+        
         for sensor_id in sensor_ids:
             pages_to_fetch = min(6, max(3, self.client.api.num_keys // len(sensor_ids))) if hasattr(self.client.api, 'num_keys') else 3
             for page in range(1, min(pages_to_fetch + 1, max_pages_per_sensor + 1)):
@@ -105,14 +109,11 @@ class IncrementalDownloaderParallel:
         page = start_page
         consecutive_errors = 0
         total_fetched = len(all_data)
+        
+        # API has a hard limit at page 16 (max 16,000 measurements per sensor) - anything beyond times out
+        max_pages = min(max_pages, 16)
 
         while page <= max_pages:
-            # Skip pages 17-18 due to consistent timeouts
-            if page in [17, 18]:
-                print(f"\n      Skipping page {page} (known timeout issue)...")
-                page += 1
-                continue
-                
             try:
                 params = {'limit': 1000, 'page': page}
                 response = self.client.api.get(f'/sensors/{sensor_id}/measurements', params)
@@ -137,12 +138,6 @@ class IncrementalDownloaderParallel:
             except Exception as e:
                 error_msg = str(e)[:100]
                 
-                # For page 16, skip to 19 if timeout (since 17-18 also timeout)
-                if page == 16 and ('408' in error_msg or 'timeout' in error_msg.lower()):
-                    print(f"\n      Timeout on page {page}, skipping to page 19...")
-                    page = 19
-                    continue
-                
                 if ('408' in error_msg or 'timeout' in error_msg.lower()) and consecutive_errors == 0:
                     print(f"\n      Timeout on page {page}, retrying once...")
                     consecutive_errors += 1
@@ -151,6 +146,8 @@ class IncrementalDownloaderParallel:
                 
                 print(f"\n      Error on page {page}: {error_msg}")
                 print(f"      Total fetched: {total_fetched} measurements")
+                if page >= 16 and ('408' in error_msg or 'timeout' in error_msg.lower()):
+                    print(f"      Note: API has a hard limit at page 16")
                 break
 
         return all_data
