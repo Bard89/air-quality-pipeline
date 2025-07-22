@@ -170,3 +170,6 @@ geckodriver
 
 # Redis
 dump.rdb
+
+# Claude documentation
+CLAUDE.md
