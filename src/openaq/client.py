@@ -1,15 +1,35 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 from src.core.api_client import RateLimitedAPIClient
+from src.core.api_client_multi_key import MultiKeyRateLimitedAPIClient
+from src.core.api_client_parallel import ParallelAPIClient
 from src.core.data_storage import DataStorage
 
 
 class OpenAQClient:
-    def __init__(self, api_key: str, storage: Optional[DataStorage] = None):
-        self.api = RateLimitedAPIClient(
-            base_url="https://api.openaq.org/v3",
-            api_key=api_key,
-            requests_per_minute=60
-        )
+    def __init__(self, api_keys: Union[str, List[str]], storage: Optional[DataStorage] = None, 
+                 parallel: bool = False):
+        # Support both single key and multiple keys
+        if isinstance(api_keys, str):
+            self.api = RateLimitedAPIClient(
+                base_url="https://api.openaq.org/v3",
+                api_key=api_keys,
+                requests_per_minute=60
+            )
+        else:
+            # Use parallel client if requested and multiple keys available
+            if parallel and len(api_keys) > 1:
+                self.api = ParallelAPIClient(
+                    base_url="https://api.openaq.org/v3",
+                    api_keys=api_keys,
+                    requests_per_minute_per_key=60
+                )
+            else:
+                # Use multi-key client for better rate limits
+                self.api = MultiKeyRateLimitedAPIClient(
+                    base_url="https://api.openaq.org/v3",
+                    api_keys=api_keys,
+                    requests_per_minute_per_key=60
+                )
         self.storage = storage or DataStorage()
     
     def get_countries(self, limit: int = 200) -> Dict:

@@ -9,6 +9,7 @@ from src.openaq.client import OpenAQClient
 from src.openaq.location_finder import LocationFinder
 from src.openaq.data_downloader import DataDownloader
 from src.openaq.incremental_downloader_all import IncrementalDownloaderAll
+from src.openaq.incremental_downloader_parallel import IncrementalDownloaderParallel
 from src.core.data_storage import DataStorage
 from src.utils.data_analyzer import analyze_dataset
 
@@ -61,17 +62,39 @@ Examples:
                        help='Download ALL data from country (day-by-day, most efficient for full country)')
     parser.add_argument('--max-locations', type=int,
                        help='Maximum number of locations to download (for --country-wide mode)')
+    parser.add_argument('--parallel', action='store_true',
+                       help='Use parallel API calls for faster downloads (requires multiple API keys)')
     
     args = parser.parse_args()
     
     load_dotenv()
-    api_key = os.getenv('OPENAQ_API_KEY')
-    if not api_key:
-        print("Error: OPENAQ_API_KEY not found in .env file")
-        sys.exit(1)
+    
+    api_keys = []
+    
+    for i in range(1, 101):
+        key = os.getenv(f'OPENAQ_API_KEY_{i:02d}')
+        if key:
+            api_keys.append(key)
+    
+    if not api_keys:
+        single_key = os.getenv('OPENAQ_API_KEY')
+        if single_key:
+            api_keys = single_key
+        else:
+            print("Error: No API keys found in .env file")
+            print("Please set either OPENAQ_API_KEY or OPENAQ_API_KEY_01, OPENAQ_API_KEY_02, etc.")
+            sys.exit(1)
+    
+    if isinstance(api_keys, list):
+        print(f"Loaded {len(api_keys)} API keys - rate limit: {60 * len(api_keys)} requests/minute")
     
     storage = DataStorage()
-    client = OpenAQClient(api_key, storage)
+    
+    use_parallel = args.parallel and isinstance(api_keys, list) and len(api_keys) > 1
+    if use_parallel:
+        print(f"PARALLEL MODE: Enabled with {len(api_keys)} keys!")
+    
+    client = OpenAQClient(api_keys, storage, parallel=use_parallel)
     
     if args.list_countries:
         print("Fetching available countries...")
@@ -117,7 +140,10 @@ Examples:
         if args.parameters:
             params = [p.strip().lower() for p in args.parameters.split(',')]
             
-        downloader = IncrementalDownloaderAll(client)
+        if use_parallel:
+            downloader = IncrementalDownloaderParallel(client)
+        else:
+            downloader = IncrementalDownloaderAll(client)
         output_path = downloader.download_country_all(
             args.country.upper(), country_id,
             params, max_locations=args.max_locations, resume=True

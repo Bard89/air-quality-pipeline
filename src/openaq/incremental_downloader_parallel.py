@@ -5,20 +5,27 @@ import time
 import json
 from pathlib import Path
 from src.openaq.client import OpenAQClient
+from src.core.api_client_parallel import ParallelAPIClient
 
 
-class IncrementalDownloaderAll:
-    """Downloads ALL data from sensors without any date filtering"""
+class IncrementalDownloaderParallel:
+    """Downloads data using parallel API calls for maximum speed"""
     
     def __init__(self, client: OpenAQClient):
         self.client = client
         self.checkpoint_file = Path('data/openaq/checkpoints/download_progress.json')
         self.checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Check if we have parallel client
+        self.is_parallel = isinstance(getattr(client.api, '__class__', None).__name__, str) and \
+                          'Parallel' in client.api.__class__.__name__
+        
+        if self.is_parallel:
+            print("Using PARALLEL downloader for maximum speed!")
     
     def save_checkpoint(self, country_code: str, location_index: int, total_locations: int,
                        completed_locations: List[int], output_file: str, 
-                       current_location_id: Optional[int] = None,
-                       current_sensor_index: Optional[int] = None):
+                       current_location_id: Optional[int] = None):
         checkpoint = {
             'country_code': country_code,
             'location_index': location_index,
@@ -26,7 +33,6 @@ class IncrementalDownloaderAll:
             'completed_locations': completed_locations,
             'output_file': output_file,
             'current_location_id': current_location_id,
-            'current_sensor_index': current_sensor_index,
             'timestamp': datetime.now().isoformat()
         }
         with open(self.checkpoint_file, 'w') as f:
@@ -44,51 +50,59 @@ class IncrementalDownloaderAll:
         else:
             df.to_csv(output_path, index=False)
     
-    def fetch_all_sensor_data(self, sensor_id: int, max_pages: int = 1000) -> List[Dict]:
-        """Fetch ALL data from a sensor without any filtering"""
-        all_data = []
-        page = 1
-        total_fetched = 0
-        sensor_start_time = time.time()
+    def fetch_sensor_pages_parallel_sync(self, sensor_ids: List[int], max_pages_per_sensor: int = 100) -> Dict[int, List]:
+        """Fetch data from multiple sensors in parallel"""
+        all_requests = []
+        request_map = {}  # Map request index to (sensor_id, page)
         
-        print(f"      Fetching ALL available data...")
+        # Build list of all requests
+        for sensor_id in sensor_ids:
+            for page in range(1, min(6, max_pages_per_sensor + 1)):  # First 5 pages per sensor
+                endpoint = f'/sensors/{sensor_id}/measurements'
+                params = {'limit': 1000, 'page': page}
+                request_index = len(all_requests)
+                all_requests.append((endpoint, params))
+                request_map[request_index] = (sensor_id, page)
+        
+        print(f"      Fetching {len(all_requests)} pages in parallel from {len(sensor_ids)} sensors...")
+        
+        # Execute all requests in parallel
+        if hasattr(self.client.api, 'get_batch'):
+            results = self.client.api.get_batch(all_requests)
+        else:
+            # Fallback to sequential if not parallel client
+            results = []
+            for endpoint, params in all_requests:
+                results.append(self.client.api.get(endpoint, params))
+        
+        # Organize results by sensor
+        sensor_data = {sensor_id: [] for sensor_id in sensor_ids}
+        
+        for i, result in enumerate(results):
+            if 'error' not in result:
+                sensor_id, page = request_map[i]
+                measurements = result.get('results', [])
+                sensor_data[sensor_id].extend(measurements)
+        
+        return sensor_data
+    
+    def fetch_remaining_sensor_data(self, sensor_id: int, start_page: int = 6, max_pages: int = 100) -> List[Dict]:
+        """Fetch remaining pages for a sensor (sequential)"""
+        all_data = []
+        page = start_page
         
         while page <= max_pages:
             try:
-                params = {
-                    'limit': 1000,
-                    'page': page
-                }
-                
+                params = {'limit': 1000, 'page': page}
                 response = self.client.api.get(f'/sensors/{sensor_id}/measurements', params)
                 measurements = response.get('results', [])
                 
                 if not measurements:
-                    print(f"\n      No more data after page {page-1}")
                     break
                 
-                page_total = len(measurements)
-                total_fetched += page_total
+                all_data.extend(measurements)
                 
-                for m in measurements:
-                    period = m.get('period', {})
-                    datetime_from = period.get('datetimeFrom', {})
-                    
-                    if datetime_from.get('utc') and m.get('value') is not None:
-                        all_data.append({
-                            'datetime': datetime_from.get('utc'),
-                            'value': m.get('value'),
-                            'period': period,
-                            'parameter': m.get('parameter', {})
-                        })
-                
-                if page % 5 == 0:
-                    elapsed = time.time() - sensor_start_time if 'sensor_start_time' in locals() else 0
-                    print(f"\r      Page {page}: {total_fetched} measurements fetched ({elapsed:.1f}s)", end='', flush=True)
-                
-                meta = response.get('meta', {})
-                if page_total < 1000:
-                    print(f"\n      Reached end of data")
+                if len(measurements) < 1000:
                     break
                 
                 page += 1
@@ -97,12 +111,11 @@ class IncrementalDownloaderAll:
                 print(f"\n      Error on page {page}: {str(e)[:50]}")
                 break
         
-        print(f"\n      Total: {total_fetched} measurements fetched")
         return all_data
     
-    def download_location_sensors_all(self, location: Dict, output_path: Path,
-                                    parameters: Optional[List[str]] = None,
-                                    start_sensor_index: int = 0) -> int:
+    def process_location_parallel(self, location: Dict, output_path: Path,
+                                parameters: Optional[List[str]] = None) -> int:
+        """Process all sensors at a location using parallel requests"""
         location_id = location['id']
         location_name = location.get('name', 'Unknown')
         coords = location.get('coordinates', {})
@@ -110,59 +123,69 @@ class IncrementalDownloaderAll:
         country_code = location.get('country', {}).get('code')
         total_measurements = 0
         
+        # Filter sensors by parameter
         sensors = []
+        sensor_info = {}
         for sensor in location.get('sensors', []):
             param_name = sensor.get('parameter', {}).get('name')
             if parameters is None or param_name in parameters:
-                sensors.append(sensor)
+                sensor_id = sensor.get('id')
+                if sensor_id:
+                    sensors.append(sensor_id)
+                    sensor_info[sensor_id] = param_name
         
-        print(f"  Processing {len(sensors)} sensors...")
+        if not sensors:
+            return 0
         
-        for i, sensor in enumerate(sensors[start_sensor_index:], start=start_sensor_index):
-            sensor_id = sensor.get('id')
-            param_name = sensor.get('parameter', {}).get('name', 'unknown')
-            if not sensor_id:
-                continue
+        print(f"  Processing {len(sensors)} sensors in parallel...")
+        
+        # Fetch first few pages from all sensors in parallel using sync wrapper
+        sensor_data = self.fetch_sensor_pages_parallel_sync(sensors)
+        
+        # Process each sensor's data
+        for sensor_id, measurements in sensor_data.items():
+            param_name = sensor_info.get(sensor_id, 'unknown')
             
-            print(f"    Sensor {i+1}/{len(sensors)}: {param_name} (ID: {sensor_id})")
+            # Check if we need more pages
+            if len(measurements) >= 5000:  # Got full 5 pages
+                print(f"    Sensor {sensor_id} ({param_name}): {len(measurements)}+ measurements...")
+                # Fetch remaining pages sequentially
+                additional_data = self.fetch_remaining_sensor_data(sensor_id, start_page=6)
+                measurements.extend(additional_data)
             
-            raw_data = self.fetch_all_sensor_data(sensor_id)
-            
-            if raw_data:
-                sensor_data = []
-                for item in raw_data:
-                    sensor_data.append({
-                        'datetime': item['datetime'],
-                        'value': float(item['value']),
-                        'sensor_id': sensor_id,
-                        'location_id': location_id,
-                        'location_name': location_name,
-                        'city': city,
-                        'country': country_code,
-                        'latitude': coords.get('latitude'),
-                        'longitude': coords.get('longitude'),
-                        'parameter': item['parameter'].get('name'),
-                        'unit': item['parameter'].get('units')
-                    })
+            if measurements:
+                # Convert to DataFrame format
+                sensor_df_data = []
+                for m in measurements:
+                    period = m.get('period', {})
+                    datetime_from = period.get('datetimeFrom', {})
+                    parameter = m.get('parameter', {})
+                    
+                    if datetime_from.get('utc') and m.get('value') is not None:
+                        sensor_df_data.append({
+                            'datetime': datetime_from.get('utc'),
+                            'value': float(m.get('value')),
+                            'sensor_id': sensor_id,
+                            'location_id': location_id,
+                            'location_name': location_name,
+                            'city': city,
+                            'country': country_code,
+                            'latitude': coords.get('latitude'),
+                            'longitude': coords.get('longitude'),
+                            'parameter': parameter.get('name'),
+                            'unit': parameter.get('units')
+                        })
                 
-                # Create DataFrame and save
-                df = pd.DataFrame(sensor_data)
-                df['datetime'] = pd.to_datetime(df['datetime'])
-                df = df.drop_duplicates(subset=['datetime', 'sensor_id', 'parameter'])
-                df = df.sort_values('datetime')
-                
-                self.append_to_csv(df, output_path)
-                sensor_measurements = len(df)
-                total_measurements += sensor_measurements
-                print(f"      ✓ Saved {sensor_measurements} measurements")
-                
-                # Show date range of saved data
-                if not df.empty:
-                    date_min = df['datetime'].min()
-                    date_max = df['datetime'].max()
-                    print(f"      Date range: {date_min.strftime('%Y-%m-%d %H:%M')} to {date_max.strftime('%Y-%m-%d %H:%M')}")
-            else:
-                print(f"      ✗ No data found")
+                if sensor_df_data:
+                    df = pd.DataFrame(sensor_df_data)
+                    df['datetime'] = pd.to_datetime(df['datetime'])
+                    df = df.drop_duplicates(subset=['datetime', 'sensor_id', 'parameter'])
+                    df = df.sort_values('datetime')
+                    
+                    self.append_to_csv(df, output_path)
+                    sensor_measurements = len(df)
+                    total_measurements += sensor_measurements
+                    print(f"    ✓ Sensor {sensor_id} ({param_name}): {sensor_measurements} measurements saved")
         
         return total_measurements
     
@@ -170,12 +193,11 @@ class IncrementalDownloaderAll:
                            parameters: Optional[List[str]] = None,
                            max_locations: Optional[int] = None,
                            resume: bool = True) -> str:
-        """Download ALL data from country without date filtering"""
+        """Download ALL data from country using parallel requests where possible"""
         
         checkpoint = None
         completed_locations = []
         start_index = 0
-        current_sensor_index = 0
         
         if resume and self.checkpoint_file.exists():
             checkpoint = self.load_checkpoint()
@@ -183,7 +205,6 @@ class IncrementalDownloaderAll:
                 print(f"\nResuming from checkpoint (location {checkpoint['location_index']}/{checkpoint['total_locations']})") 
                 completed_locations = checkpoint['completed_locations']
                 start_index = checkpoint['location_index']
-                current_sensor_index = checkpoint.get('current_sensor_index', 0)
                 output_path = Path(checkpoint['output_file'])
             else:
                 checkpoint = None
@@ -233,14 +254,15 @@ class IncrementalDownloaderAll:
         print(f"Locations to download: {len(active_locations)}")
         print(f"Already completed: {len(completed_locations)}")
         
-        print(f"\nDownloading ALL AVAILABLE DATA (no date filtering)")
+        if self.is_parallel:
+            print(f"\nPARALLEL MODE ENABLED - Using all {getattr(self.client.api, 'num_keys', 1)} API keys concurrently!")
+        
+        print(f"\nDownloading ALL AVAILABLE DATA")
         print(f"Data will be saved to: {output_path}")
-        print("Data is saved after EACH SENSOR completes")
-        print("You can safely interrupt and resume later")
+        print("Data is saved after each location completes")
+        print("-" * 60)
         
         start_time = time.time()
-        print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("-" * 60)
         total_measurements = 0
         
         for i, location in enumerate(active_locations[start_index:], start=start_index):
@@ -256,29 +278,38 @@ class IncrementalDownloaderAll:
             try:
                 # Save checkpoint before processing
                 self.save_checkpoint(country_code, i, total_locations, completed_locations, 
-                                   str(output_path), loc_id, current_sensor_index)
+                                   str(output_path), loc_id)
                 
                 # Process location
-                loc_measurements = self.download_location_sensors_all(
-                    location, output_path, parameters, current_sensor_index
-                )
+                if self.is_parallel and sensor_count > 5:
+                    # Use parallel processing for locations with many sensors
+                    loc_measurements = self.process_location_parallel(
+                        location, output_path, parameters
+                    )
+                else:
+                    # Fall back to sequential for small locations
+                    from src.openaq.incremental_downloader_all import IncrementalDownloaderAll
+                    sequential_downloader = IncrementalDownloaderAll(self.client)
+                    loc_measurements = sequential_downloader.download_location_sensors_all(
+                        location, output_path, parameters
+                    )
                 
                 total_measurements += loc_measurements
-                current_sensor_index = 0  # Reset for next location
                 
                 if loc_measurements > 0:
-                    print(f"  ✓ Location complete: {loc_measurements:,} measurements in {time.time()-location_start:.1f}s")
+                    elapsed = time.time() - location_start
+                    rate = loc_measurements / elapsed if elapsed > 0 else 0
+                    print(f"  ✓ Location complete: {loc_measurements:,} measurements in {elapsed:.1f}s ({rate:.0f} meas/sec)")
                 else:
                     print(f"  ✗ No data found")
                     
             except KeyboardInterrupt:
-                print("\n\nInterrupted! All completed sensor data has been saved.")
+                print("\n\nInterrupted! All completed data has been saved.")
                 print(f"Resume by running the same command again.")
                 raise
             except Exception as e:
                 print(f"  ✗ Error processing location: {str(e)}")
                 print(f"  Skipping to next location...")
-                current_sensor_index = 0
                 
             completed_locations.append(loc_id)
             self.save_checkpoint(country_code, i+1, total_locations, completed_locations, str(output_path))
@@ -288,38 +319,16 @@ class IncrementalDownloaderAll:
                 rate = (i - start_index + 1) / elapsed
                 remaining = len(active_locations) - i - 1
                 eta = remaining / rate if rate > 0 else 0
-                
-                # Format elapsed time
-                elapsed_hours = int(elapsed // 3600)
-                elapsed_minutes = int((elapsed % 3600) // 60)
-                elapsed_seconds = int(elapsed % 60)
-                elapsed_str = f"{elapsed_hours}h {elapsed_minutes}m {elapsed_seconds}s" if elapsed_hours > 0 else f"{elapsed_minutes}m {elapsed_seconds}s"
-                
-                # Format ETA
-                eta_hours = int(eta // 3600)
-                eta_minutes = int((eta % 3600) // 60)
-                eta_str = f"{eta_hours}h {eta_minutes}m" if eta_hours > 0 else f"{eta_minutes}m"
-                
                 print(f"  Progress: {len(completed_locations)}/{total_locations} | "
-                      f"Total: {total_measurements:,} measurements | "
-                      f"Elapsed: {elapsed_str} | ETA: {eta_str}")
+                      f"Total: {total_measurements:,} measurements | ETA: {eta/60:.1f} min")
         
         if self.checkpoint_file.exists():
             self.checkpoint_file.unlink()
         
-        total_elapsed = time.time() - start_time
-        total_hours = int(total_elapsed // 3600)
-        total_minutes = int((total_elapsed % 3600) // 60)
-        total_seconds = int(total_elapsed % 60)
-        
         print(f"\n{'='*60}")
         print(f"DOWNLOAD COMPLETE")
-        if total_hours > 0:
-            print(f"Total time: {total_hours}h {total_minutes}m {total_seconds}s")
-        else:
-            print(f"Total time: {total_minutes}m {total_seconds}s")
+        print(f"Total time: {(time.time() - start_time)/60:.1f} minutes")
         print(f"Total measurements: {total_measurements:,}")
-        print(f"Average rate: {total_measurements/total_elapsed:.0f} measurements/second") if total_elapsed > 0 else None
         print(f"Output file: {output_path}")
         print(f"{'='*60}")
         
