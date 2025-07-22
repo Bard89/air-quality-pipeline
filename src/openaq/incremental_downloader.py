@@ -79,6 +79,11 @@ class IncrementalDownloader:
                         parameter = m.get('parameter', {})
                         
                         if datetime_from.get('utc') and m.get('value') is not None:
+                            # Parse measurement datetime and check if it's within our date range
+                            meas_datetime = pd.to_datetime(datetime_from.get('utc'))
+                            if meas_datetime < start_date or meas_datetime > end_date:
+                                continue  # Skip measurements outside our date range
+                            
                             all_data.append({
                                 'datetime': datetime_from.get('utc'),
                                 'value': float(m.get('value')),
@@ -200,7 +205,7 @@ class IncrementalDownloader:
             loc_name = location.get('name', 'Unknown')
             sensor_count = len(location.get('sensors', []))
             
-            print(f"\nLocation {i+1+len(completed_locations)}/{total_locations}: {loc_name}")
+            print(f"\nLocation {len(completed_locations)+1}/{total_locations}: {loc_name}")
             print(f"  ID: {loc_id} | Sensors: {sensor_count}")
             
             # Download data for this location
@@ -225,7 +230,7 @@ class IncrementalDownloader:
                 rate = (i - start_index + 1) / elapsed
                 remaining = len(active_locations) - i - 1
                 eta = remaining / rate if rate > 0 else 0
-                print(f"  Progress: {i+1+len(completed_locations)}/{total_locations} | "
+                print(f"  Progress: {len(completed_locations)}/{total_locations} | "
                       f"Total: {total_measurements:,} measurements | ETA: {eta/60:.1f} min")
         
         # Cleanup checkpoint on completion
