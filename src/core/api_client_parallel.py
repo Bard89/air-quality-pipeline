@@ -61,7 +61,8 @@ class ParallelAPIClient:
                     data = await response.json()
                     # Add key info to response for tracking
                     if isinstance(data, dict):
-                        data['_api_key_index'] = key_index + 1
+                        data['_api_key_index'] = key_index
+                        data['_api_key_display'] = key_index + 1  # For display (1-based)
                     return data, key_index
 
             except asyncio.TimeoutError:
@@ -96,17 +97,22 @@ class ParallelAPIClient:
         async with aiohttp.ClientSession(connector=connector) as session:
             # Create tasks for all requests
             tasks = []
-            # Use random key assignment to better distribute load
             import random
-            available_keys = list(range(self.num_keys))
+            
+            # Randomly shuffle key assignments for better distribution
+            key_assignments = []
+            for i in range(len(requests)):
+                key_assignments.append(i % self.num_keys)
+            
+            # Shuffle to avoid always using keys in order
+            random.shuffle(key_assignments)
+            
+            # Debug: show first few assignments
+            if len(requests) <= 30:
+                print(f"      [DEBUG] Key assignment order: {key_assignments}")
             
             for i, (endpoint, params) in enumerate(requests):
-                # For small batches, ensure we use different keys
-                if len(requests) < self.num_keys:
-                    key_index = available_keys[i % len(available_keys)]
-                else:
-                    # For larger batches, distribute evenly
-                    key_index = i % self.num_keys
+                key_index = key_assignments[i]
                 task = self._get_with_key(session, key_index, endpoint, params)
                 tasks.append(task)
 

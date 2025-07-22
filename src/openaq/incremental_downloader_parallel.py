@@ -79,14 +79,17 @@ class IncrementalDownloaderParallel:
         # Execute all requests in parallel
         if hasattr(self.client.api, 'get_batch'):
             results = self.client.api.get_batch(all_requests)
-            # Count successful requests by API key
+            # Track key usage in order
+            key_sequence = []
             key_usage = {}
-            for result in results:
-                if isinstance(result, dict) and '_api_key_index' in result:
-                    key_idx = result['_api_key_index']
-                    key_usage[key_idx] = key_usage.get(key_idx, 0) + 1
-            if key_usage:
-                print(f"      API keys used: {sorted(key_usage.keys())}")
+            for i, result in enumerate(results):
+                if isinstance(result, dict) and '_api_key_display' in result:
+                    key_display = result['_api_key_display']
+                    key_sequence.append(key_display)
+                    key_usage[key_display] = key_usage.get(key_display, 0) + 1
+            if key_sequence:
+                print(f"      API keys actually used (first 10): {key_sequence[:10]}{'...' if len(key_sequence) > 10 else ''}")
+                print(f"      Key distribution: {len(key_usage)} unique keys, each used {list(key_usage.values())[:5]}... times")
         else:
             # Fallback to sequential if not parallel client
             results = []
@@ -102,6 +105,8 @@ class IncrementalDownloaderParallel:
                 # Remove tracking info before processing
                 if '_api_key_index' in result:
                     del result['_api_key_index']
+                if '_api_key_display' in result:
+                    del result['_api_key_display']
                 measurements = result.get('results', [])
                 sensor_data[sensor_id].extend(measurements)
 
