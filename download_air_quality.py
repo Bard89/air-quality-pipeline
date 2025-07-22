@@ -167,9 +167,27 @@ Examples:
         active_sensors = limited_sensors
         print(f"\nLimited to {len(active_sensors)} sensors")
     
+    # Warn about large downloads
+    days = (end_date - start_date).days
+    estimated_requests = len(active_sensors) * ((days + 29) // 30)  # 30-day chunks
+    estimated_time = estimated_requests * 1.5 / 60  # 1.5s per request
+    
+    if estimated_time > 60:
+        print(f"\n⚠️  WARNING: This download will make ~{estimated_requests:,} API requests")
+        print(f"Estimated time: {estimated_time:.0f} minutes")
+        print("\nConsider using filters to reduce data:")
+        print("  --parameters pm25,pm10  # Download only specific pollutants")
+        print("  --limit-sensors 10      # Limit sensors per parameter")
+        print("  --days 30               # Download recent data only")
+        
+        response = input("\nContinue? (y/N): ")
+        if response.lower() != 'y':
+            print("Download cancelled.")
+            sys.exit(0)
+    
     # Download data
     downloader = DataDownloader(client)
-    print(f"\nDownloading data from {len(active_sensors)} sensors...")
+    print(f"\nStarting download from {len(active_sensors)} sensors...")
     
     df = downloader.download_multiple_sensors(active_sensors, start_date, end_date)
     
