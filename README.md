@@ -9,10 +9,32 @@ A minimal, efficient tool for downloading global air quality data from OpenAQ. D
 pip install -r requirements.txt
 ```
 
-2. Get your OpenAQ API key:
+2. Get your OpenAQ API key(s):
    - Sign up at https://explore.openaq.org/register
    - Create `.env` file: `cp .env.example .env`
-   - Add your API key to `.env`
+   - Add your API key(s) to `.env`
+   
+   **Single API key:**
+   ```
+   OPENAQ_API_KEY=your-key-here
+   ```
+   
+   **Multiple API keys (for faster downloads):**
+   ```
+   OPENAQ_API_KEY_01=first-key-here
+   OPENAQ_API_KEY_02=second-key-here
+   OPENAQ_API_KEY_03=third-key-here
+   # ... up to OPENAQ_API_KEY_100
+   ```
+   
+   Using multiple API keys multiplies your rate limit (e.g., 3 keys = 180 requests/minute)
+   
+   **Benefits of multiple keys:**
+   - Each additional key reduces download time proportionally
+   - 3 keys = ~3x faster downloads
+   - 10 keys = ~10x faster downloads
+   - Automatic round-robin rotation between keys
+   - No complex setup required
 
 ## Usage
 
@@ -33,6 +55,9 @@ pip install -r requirements.txt
 
 # Download all PM2.5 data from top 50 locations
 ./download_air_quality.py --country IN --parameters pm25 --country-wide --max-locations 50
+
+# Use parallel mode for experimental faster downloads (requires multiple API keys)
+./download_air_quality.py --country IN --country-wide --max-locations 10 --parallel
 ```
 
 ### Command Options
@@ -43,6 +68,7 @@ pip install -r requirements.txt
 - `--max-locations`: Limit number of locations (use with --country-wide)
 - `--analyze, -a`: Auto-analyze after download (default: true)
 - `--list-countries`: List all available countries
+- `--parallel`: Enable parallel mode (experimental, requires multiple API keys)
 
 ### Available Parameters
 
@@ -120,12 +146,15 @@ Each download includes:
 ├── src/
 │   ├── core/                # Reusable components
 │   │   ├── api_client.py    # Rate-limited HTTP client
+│   │   ├── api_client_multi_key.py  # Multi-key rotation for faster downloads
+│   │   ├── api_client_parallel.py   # Parallel API client (experimental)
 │   │   └── data_storage.py  # File management
 │   ├── openaq/              # OpenAQ-specific modules
 │   │   ├── client.py        # API wrapper
 │   │   ├── location_finder.py
 │   │   ├── data_downloader.py
-│   │   └── incremental_downloader_all.py  # Downloads all sensor data
+│   │   ├── incremental_downloader_all.py  # Downloads all sensor data
+│   │   └── incremental_downloader_parallel.py  # Parallel downloader (experimental)
 │   └── utils/
 │       └── data_analyzer.py # Data analysis
 └── data/                    # Downloaded data (gitignored)
@@ -210,9 +239,23 @@ The tool downloads ALL available historical data from each sensor because the Op
 
 ### General Performance
 
-- Rate limited to 60 requests/minute (1.05s delay between requests)
+- Base rate limit: 60 requests/minute per API key
+- With multiple keys: N keys × 60 = total requests/minute
+- Effective delay between requests: 1.0s ÷ number of keys
 - Data saved incrementally after each sensor completes (safe from interruptions)
 - Downloads ALL historical data from each sensor (no date filtering)
+- Shows detailed progress: start time, elapsed time, measurements/second, and ETA
+- Real-time progress updates during sensor downloads
+
+**Speed improvements with multiple API keys:**
+- 1 key: Standard speed (60 req/min)
+- 2 keys: 2x faster (120 req/min, 0.5s delay)
+- 3 keys: 3x faster (180 req/min, 0.33s delay)
+- 5 keys: 5x faster (300 req/min, 0.2s delay)
+- 10 keys: 10x faster (600 req/min, 0.1s delay)
+- 20 keys: 20x faster (1,200 req/min, 0.05s delay)
+- 50 keys: 50x faster (3,000 req/min, 0.02s delay)
+- 100 keys: 100x faster (6,000 req/min, 0.01s delay)
 
 ## License
 
