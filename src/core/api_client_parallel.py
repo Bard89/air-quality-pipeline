@@ -28,7 +28,7 @@ class ParallelAPIClient:
         print(f"Theoretical max rate: {requests_per_minute_per_key * self.num_keys} requests/minute")
 
     async def _get_with_key(self, session: aiohttp.ClientSession, key_index: int,
-                           endpoint: str, params: Optional[Dict] = None) -> Tuple[Dict, int]:
+                           endpoint: str, params: Optional[Dict] = None, retry_attempt: int = 0) -> Tuple[Dict, int]:
         """Make a request with a specific API key"""
         async with self.key_locks[key_index]:
             # Rate limiting for this specific key
@@ -58,11 +58,21 @@ class ParallelAPIClient:
                         )
 
                     response.raise_for_status()
-                    return await response.json(), key_index
+                    data = await response.json()
+                    # Add key info to response for tracking
+                    if isinstance(data, dict):
+                        data['_api_key_index'] = key_index + 1
+                    return data, key_index
 
             except asyncio.TimeoutError:
                 self.error_counts[key_index] += 1
-                raise aiohttp.ClientTimeout(f"Request timeout on key {key_index}")
+                # If this is the first attempt and we have more keys, try with a different key
+                if retry_attempt == 0 and self.num_keys > 1:
+                    # Find a different key to retry with
+                    next_key_index = (key_index + 1) % self.num_keys
+                    print(f"      Timeout on key {key_index + 1}, retrying with key {next_key_index + 1}...")
+                    return await self._get_with_key(session, next_key_index, endpoint, params, retry_attempt + 1)
+                raise aiohttp.ClientTimeout(f"Request timeout on key {key_index + 1}")
             except Exception:
                 self.error_counts[key_index] += 1
                 raise
@@ -109,8 +119,8 @@ class ParallelAPIClient:
                     result, _ = response
                     results.append(result)
 
-        # Print stats every 100 requests
-        if self.total_requests % 100 == 0:
+        # Print stats every 50 requests in parallel mode
+        if self.total_requests % 50 == 0:
             self._print_stats()
 
         return results
@@ -125,9 +135,12 @@ class ParallelAPIClient:
 
     def _print_stats(self):
         """Print usage statistics"""
-        print(f"\nParallel API Stats (Total: {self.total_requests} requests):")
-        for i in range(self.num_keys):
-            count = self.request_counts[i]
-            errors = self.error_counts[i]
-            percentage = (count / self.total_requests * 100) if self.total_requests > 0 else 0
-            print(f"  Key {i + 1}: {count} requests ({percentage:.1f}%), {errors} errors")
+        print(f"\n      [PARALLEL MODE] Total requests: {self.total_requests} | Keys active: {sum(1 for c in self.request_counts.values() if c > 0)}/{self.num_keys}")
+        # Show top 5 most used keys
+        sorted_keys = sorted(range(self.num_keys), key=lambda i: self.request_counts[i], reverse=True)[:5]
+        key_info = []
+        for i in sorted_keys:
+            if self.request_counts[i] > 0:
+                key_info.append(f"K{i+1}:{self.request_counts[i]}")
+        if key_info:
+            print(f"      Top keys: {' | '.join(key_info)}")
