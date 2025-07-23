@@ -18,6 +18,9 @@ class ParallelAPIClient:
         self.request_counts = defaultdict(int)
         self.total_requests = 0
         self.error_counts = defaultdict(int)
+        
+        # Global rate limiting
+        self.global_semaphore = asyncio.Semaphore(self.num_keys)  # Use all available keys concurrently
 
         print(f"Initialized parallel client with {self.num_keys} API keys")
         print(f"Maximum parallel requests: {self.num_keys}")
@@ -25,49 +28,56 @@ class ParallelAPIClient:
 
     async def _get_with_key(self, session: aiohttp.ClientSession, key_index: int,
                            endpoint: str, params: Optional[Dict] = None, retry_attempt: int = 0) -> Tuple[Dict, int]:
-        async with self.key_locks[key_index]:
-            current_time = time.time()
-            time_since_last = current_time - self.last_request_times[key_index]
-            if time_since_last < self.request_delay:
-                await asyncio.sleep(self.request_delay - time_since_last)
+        async with self.global_semaphore:  # Global rate limiting
+            async with self.key_locks[key_index]:
+                current_time = time.time()
+                time_since_last = current_time - self.last_request_times[key_index]
+                # Increase minimum delay between requests per key
+                min_delay = max(self.request_delay, 2.0)  # At least 2 seconds between requests per key
+                if time_since_last < min_delay:
+                    await asyncio.sleep(min_delay - time_since_last)
 
-            url = f"{self.base_url}{endpoint}"
-            headers = {'X-API-Key': self.api_keys[key_index]}
+                url = f"{self.base_url}{endpoint}"
+                headers = {'X-API-Key': self.api_keys[key_index]}
 
-            try:
-                timeout = aiohttp.ClientTimeout(total=30)
-                async with session.get(url, params=params, headers=headers, timeout=timeout) as response:
-                    self.last_request_times[key_index] = time.time()
-                    self.request_counts[key_index] += 1
-                    self.total_requests += 1
+                try:
+                    timeout = aiohttp.ClientTimeout(total=45)  # Increase timeout to 45 seconds
+                    async with session.get(url, params=params, headers=headers, timeout=timeout) as response:
+                        self.last_request_times[key_index] = time.time()
+                        self.request_counts[key_index] += 1
+                        self.total_requests += 1
 
-                    if response.status == 429:
-                        self.error_counts[key_index] += 1
-                        await asyncio.sleep(self.rate_limit_backoff)
-                        raise aiohttp.ClientResponseError(
-                            request_info=response.request_info,
-                            history=response.history,
-                            status=response.status,
-                            message=f"Rate limit hit on key {key_index}"
-                        )
+                        if response.status == 429:
+                            self.error_counts[key_index] += 1
+                            await asyncio.sleep(self.rate_limit_backoff)
+                            raise aiohttp.ClientResponseError(
+                                request_info=response.request_info,
+                                history=response.history,
+                                status=response.status,
+                                message=f"Rate limit hit on key {key_index}"
+                            )
 
-                    response.raise_for_status()
-                    data = await response.json()
-                    if isinstance(data, dict):
-                        data['_api_key_index'] = key_index
-                        data['_api_key_display'] = key_index + 1
-                    return data, key_index
+                        response.raise_for_status()
+                        data = await response.json()
+                        if isinstance(data, dict):
+                            data['_api_key_index'] = key_index
+                            data['_api_key_display'] = key_index + 1
+                        return data, key_index
 
-            except asyncio.TimeoutError:
-                self.error_counts[key_index] += 1
-                if retry_attempt == 0 and self.num_keys > 1:
-                    next_key_index = (key_index + 1) % self.num_keys
-                    print(f"      Timeout on key {key_index + 1}, retrying with key {next_key_index + 1}...")
-                    return await self._get_with_key(session, next_key_index, endpoint, params, retry_attempt + 1)
-                raise aiohttp.ClientTimeout(f"Request timeout on key {key_index + 1}")
-            except Exception:
-                self.error_counts[key_index] += 1
-                raise
+                except asyncio.TimeoutError:
+                    self.error_counts[key_index] += 1
+                    # Don't retry on timeout - just fail fast
+                    page_info = ""
+                    if params and 'page' in params:
+                        page_info = f" (page {params['page']})"
+                    sensor_info = ""
+                    if '/sensors/' in endpoint:
+                        sensor_info = f" for {endpoint.split('/')[-2]}"
+                    print(f"      Timeout on key {key_index + 1}{page_info}{sensor_info}")
+                    raise asyncio.TimeoutError(f"Request timeout on key {key_index + 1}{page_info}")
+                except Exception:
+                    self.error_counts[key_index] += 1
+                    raise
 
     async def get_single(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
         connector = aiohttp.TCPConnector(limit=100, limit_per_host=30)
@@ -99,8 +109,13 @@ class ParallelAPIClient:
                 key_index = key_assignments[i]
                 task = self._get_with_key(session, key_index, endpoint, params)
                 tasks.append(task)
+                # Small delay to avoid overwhelming the API
+                if i > 0 and i % 5 == 0:
+                    await asyncio.sleep(0.2)
 
-            semaphore = asyncio.Semaphore(self.num_keys * 2)
+            # Limit concurrent requests to avoid overwhelming the API
+            # Use all available keys for maximum throughput
+            semaphore = asyncio.Semaphore(self.num_keys * 2)  # Allow 2x keys for better utilization
             
             async def bounded_task(task):
                 async with semaphore:

@@ -62,7 +62,14 @@ class IncrementalDownloaderParallel:
         max_pages_per_sensor = min(max_pages_per_sensor, 16)
         
         for sensor_id in sensor_ids:
-            pages_to_fetch = min(6, max(3, self.client.api.num_keys // len(sensor_ids))) if hasattr(self.client.api, 'num_keys') else 3
+            # Be very conservative with initial parallel fetching
+            # Only fetch 1-2 pages initially to avoid timeouts
+            if len(sensor_ids) >= 6:
+                pages_to_fetch = 1  # Only 1 page for 6+ sensors
+            elif len(sensor_ids) >= 4:
+                pages_to_fetch = 2  # 2 pages for 4-5 sensors
+            else:
+                pages_to_fetch = min(3, max(2, self.client.api.num_keys // (len(sensor_ids) * 4))) if hasattr(self.client.api, 'num_keys') else 2
             for page in range(1, min(pages_to_fetch + 1, max_pages_per_sensor + 1)):
                 endpoint = f'/sensors/{sensor_id}/measurements'
                 params = {'limit': 1000, 'page': page}
@@ -93,6 +100,9 @@ class IncrementalDownloaderParallel:
 
         sensor_data = {sensor_id: [] for sensor_id in sensor_ids}
 
+        successful_requests = 0
+        failed_requests = 0
+        
         for i, result in enumerate(results):
             if 'error' not in result:
                 sensor_id, page = request_map[i]
@@ -102,6 +112,12 @@ class IncrementalDownloaderParallel:
                     del result['_api_key_display']
                 measurements = result.get('results', [])
                 sensor_data[sensor_id].extend(measurements)
+                successful_requests += 1
+            else:
+                failed_requests += 1
+        
+        if failed_requests > 0:
+            print(f"      Warning: {failed_requests}/{len(results)} requests failed (will retry sequentially)")
 
         return sensor_data
 
@@ -111,7 +127,7 @@ class IncrementalDownloaderParallel:
         consecutive_errors = 0
         total_fetched = len(all_data)
         
-        # API has a hard limit at page 16 (max 16,000 measurements per sensor) - anything beyond times out
+        # API has a hard limit at page 16 (max 16,000 measurements per sensor)
         max_pages = min(max_pages, 16)
 
         while page <= max_pages:
@@ -178,6 +194,7 @@ class IncrementalDownloaderParallel:
         print(f"  Processing {len(sensors)} sensors in parallel...")
 
         sensor_data = self.fetch_sensor_pages_parallel_sync(sensors)
+
         for sensor_id, measurements in sensor_data.items():
             param_name = sensor_info.get(sensor_id, 'unknown')
 
@@ -365,10 +382,6 @@ class IncrementalDownloaderParallel:
         if use_parallel_locations:
             print(f"  → Using PARALLEL LOCATION PROCESSING")
             print(f"  → Will process multiple locations concurrently to utilize all {available_keys} API keys")
-        else:
-            print(f"  → Using SEQUENTIAL location processing (parallel sensors within each location)")
-            if avg_sensors >= max_avg_sensors:
-                print(f"  → Reason: High sensor density ({avg_sensors:.1f} sensors/location) can utilize all keys")
             
             # Process locations in batches
             batch_size = max(2, min(10, int(available_keys / (avg_sensors * 3))))  # 3 pages per sensor estimate
@@ -385,7 +398,6 @@ class IncrementalDownloaderParallel:
                 batch_start = time.time()
                 
                 try:
-                    # Save checkpoint before processing batch
                     self.save_checkpoint(country_code, i, total_locations, completed_locations,
                                        str(output_path), batch[0][1]['id'])
                     
@@ -418,6 +430,10 @@ class IncrementalDownloaderParallel:
                           f"Total: {total_measurements:,} measurements | ETA: {eta:.1f} min")
         
         else:
+            print(f"  → Using SEQUENTIAL location processing (parallel sensors within each location)")
+            if self.is_parallel and avg_sensors >= max_avg_sensors:
+                print(f"  → Reason: High sensor density ({avg_sensors:.1f} sensors/location) can utilize all keys")
+            
             # Original sequential processing for high sensor count locations
             for i, location in enumerate(active_locations[start_index:], start=start_index):
                 loc_id = location['id']
