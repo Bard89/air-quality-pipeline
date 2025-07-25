@@ -52,8 +52,7 @@ class CheckpointManager:
             "checkpoint_file": str(checkpoint_file),
             "location_index": location_index,
             "timestamp": checkpoint_data["timestamp"],
-            "total_locations": total_locations,
-            "measurements_count": None  # Can be updated later
+            "total_locations": total_locations
         })
         
         self._save_history()
