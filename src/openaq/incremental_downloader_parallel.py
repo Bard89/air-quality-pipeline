@@ -437,16 +437,23 @@ class IncrementalDownloaderParallel:
 
         print(f"Found {len(all_locations)} locations")
 
-        active_locations = [loc for loc in all_locations if loc['id'] not in completed_locations]
-
-        active_locations.sort(key=lambda x: len(x.get('sensors', [])), reverse=True)
+        # Sort all locations first
+        all_locations.sort(key=lambda x: len(x.get('sensors', [])), reverse=True)
+        
+        # If we have a start_index, use it to slice the locations
+        if start_index > 0:
+            active_locations = all_locations[start_index:]
+            print(f"Resuming from location index {start_index}")
+        else:
+            active_locations = [loc for loc in all_locations if loc['id'] not in completed_locations]
 
         if max_locations and len(active_locations) > max_locations:
             active_locations = active_locations[:max_locations]
 
-        total_locations = len(active_locations) + len(completed_locations)
+        total_locations = len(all_locations)
+        already_completed = start_index if start_index > 0 else len(completed_locations)
         print(f"Locations to download: {len(active_locations)}")
-        print(f"Already completed: {len(completed_locations)}")
+        print(f"Already completed: {already_completed}")
 
         if self.is_parallel:
             print(f"\nPARALLEL MODE ENABLED - Using all {getattr(self.client.api, 'num_keys', 1)} API keys concurrently!")
@@ -488,7 +495,9 @@ class IncrementalDownloaderParallel:
                 batch_end = min(i + batch_size, len(active_locations))
                 batch = [(idx, loc) for idx, loc in enumerate(active_locations[i:batch_end], start=i)]
                 
-                print(f"\nProcessing locations {len(completed_locations)+1}-{len(completed_locations)+len(batch)} of {total_locations}")
+                current_start = already_completed + i + 1
+                current_end = min(current_start + len(batch) - 1, total_locations)
+                print(f"\nProcessing locations {current_start}-{current_end} of {total_locations}")
                 for _, loc in batch:
                     print(f"  - {loc.get('name', 'Unknown')} (ID: {loc['id']}, Sensors: {len(loc.get('sensors', []))})")  
                 
@@ -516,7 +525,8 @@ class IncrementalDownloaderParallel:
                     raise
                 
                 i = batch_end
-                self.save_checkpoint(country_code, i, total_locations, completed_locations, str(output_path))
+                # Save actual progress (start_index + current position)
+                self.save_checkpoint(country_code, start_index + i, total_locations, completed_locations, str(output_path))
                 
                 elapsed = time.time() - start_time
                 if elapsed > 0:
