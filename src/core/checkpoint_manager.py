@@ -75,7 +75,22 @@ class CheckpointManager:
     def get_or_create_output_file(self, country_code: str, resume: bool = True) -> Tuple[Path, Optional[Dict]]:
         """Get existing output file or create new one"""
         if resume:
-            # Look for existing checkpoints for this country
+            # First check for existing checkpoint file
+            checkpoint_file = self.checkpoint_dir / f"checkpoint_{country_code.lower()}_all_parallel.json"
+            if checkpoint_file.exists():
+                with open(checkpoint_file, 'r') as f:
+                    checkpoint = json.load(f)
+                if checkpoint and checkpoint['country_code'] == country_code:
+                    output_path = Path(checkpoint['output_file'])
+                    if output_path.exists():
+                        print(f"\nFound existing download: {checkpoint['output_file']}")
+                        print(f"Last checkpoint: location {checkpoint['location_index']}/{checkpoint['total_locations']}")
+                        # Add to history if not already there
+                        if checkpoint['output_file'] not in self.history:
+                            self.history[checkpoint['output_file']] = []
+                        return output_path, checkpoint
+            
+            # Look for existing checkpoints in history
             for output_file, checkpoints in self.history.items():
                 if checkpoints and country_code.lower() in output_file.lower():
                     # Check if file exists
