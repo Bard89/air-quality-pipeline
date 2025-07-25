@@ -54,7 +54,7 @@ class IncrementalDownloaderParallel:
         else:
             df.to_csv(output_path, index=False)
 
-    def fetch_sensor_pages_parallel_sync(self, sensor_ids: List[int], max_pages_per_sensor: int = 100) -> Dict[int, List]:
+    def fetch_sensor_pages_parallel_sync(self, sensor_ids: List[int], max_pages_per_sensor: int = 100, location_name: str = "") -> Dict[int, List]:
         all_requests = []
         request_map = {}
         
@@ -62,8 +62,30 @@ class IncrementalDownloaderParallel:
         max_pages_per_sensor = min(max_pages_per_sensor, 16)
         
         for sensor_id in sensor_ids:
-            pages_to_fetch = min(6, max(3, self.client.api.num_keys // len(sensor_ids))) if hasattr(self.client.api, 'num_keys') else 3
-            for page in range(1, min(pages_to_fetch + 1, max_pages_per_sensor + 1)):
+            # Be very conservative with initial parallel fetching
+            # Fetch more pages when we have many keys available
+            available_keys = getattr(self.client.api, 'num_keys', 1)
+            if available_keys >= 20:
+                # With many keys, we can fetch more pages initially
+                if len(sensor_ids) >= 6:
+                    pages_to_fetch = 2  # 2 pages for 6+ sensors
+                elif len(sensor_ids) >= 4:
+                    pages_to_fetch = 3  # 3 pages for 4-5 sensors
+                else:
+                    pages_to_fetch = min(4, max(3, available_keys // (len(sensor_ids) * 3)))
+            else:
+                # Conservative for fewer keys
+                if len(sensor_ids) >= 6:
+                    pages_to_fetch = 1
+                elif len(sensor_ids) >= 4:
+                    pages_to_fetch = 2
+                else:
+                    pages_to_fetch = min(3, max(2, available_keys // (len(sensor_ids) * 4))) if available_keys > 1 else 2
+            
+            # Apply max_pages_per_sensor limit if specified
+            pages_to_fetch = min(pages_to_fetch, max_pages_per_sensor)
+            
+            for page in range(1, pages_to_fetch + 1):
                 endpoint = f'/sensors/{sensor_id}/measurements'
                 params = {'limit': 1000, 'page': page}
                 request_index = len(all_requests)
@@ -71,8 +93,9 @@ class IncrementalDownloaderParallel:
                 request_map[request_index] = (sensor_id, page)
 
         pages_per_sensor = len(all_requests) // len(sensor_ids) if sensor_ids else 0
-        print(f"      Fetching {len(all_requests)} pages in parallel ({pages_per_sensor} pages × {len(sensor_ids)} sensors)")
-        print(f"      Using {getattr(self.client.api, 'num_keys', 1)} API keys concurrently")
+        loc_info = f" for {location_name}" if location_name else ""
+        print(f"      Fetching {len(all_requests)} pages in parallel ({pages_per_sensor} pages × {len(sensor_ids)} sensors){loc_info}")
+        print(f"      Using {getattr(self.client.api, 'num_keys', 1)} API keys available")
 
         if hasattr(self.client.api, 'get_batch'):
             results = self.client.api.get_batch(all_requests)
@@ -84,8 +107,15 @@ class IncrementalDownloaderParallel:
                     key_sequence.append(key_display)
                     key_usage[key_display] = key_usage.get(key_display, 0) + 1
             if key_sequence:
-                print(f"      API keys actually used (first 10): {key_sequence[:10]}{'...' if len(key_sequence) > 10 else ''}")
-                print(f"      Key distribution: {len(key_usage)} unique keys, each used {list(key_usage.values())[:5]}... times")
+                # Sort keys for display
+                sorted_keys = sorted(set(key_sequence))
+                key_usage_sorted = sorted(key_usage.items())
+                print(f"      Keys used: {sorted_keys} (total: {len(sorted_keys)} unique keys)")
+                # Show usage distribution
+                usage_summary = ', '.join([f"key{k}: {v}x" for k, v in key_usage_sorted[:10]])
+                if len(key_usage_sorted) > 10:
+                    usage_summary += f"... ({len(key_usage_sorted)-10} more)"
+                print(f"      Usage: {usage_summary}")
         else:
             results = []
             for endpoint, params in all_requests:
@@ -93,6 +123,9 @@ class IncrementalDownloaderParallel:
 
         sensor_data = {sensor_id: [] for sensor_id in sensor_ids}
 
+        successful_requests = 0
+        failed_requests = 0
+        
         for i, result in enumerate(results):
             if 'error' not in result:
                 sensor_id, page = request_map[i]
@@ -102,6 +135,12 @@ class IncrementalDownloaderParallel:
                     del result['_api_key_display']
                 measurements = result.get('results', [])
                 sensor_data[sensor_id].extend(measurements)
+                successful_requests += 1
+            else:
+                failed_requests += 1
+        
+        if failed_requests > 0:
+            print(f"      Warning: {failed_requests}/{len(results)} requests failed (will retry sequentially)")
 
         return sensor_data
 
@@ -111,7 +150,7 @@ class IncrementalDownloaderParallel:
         consecutive_errors = 0
         total_fetched = len(all_data)
         
-        # API has a hard limit at page 16 (max 16,000 measurements per sensor) - anything beyond times out
+        # API has a hard limit at page 16 (max 16,000 measurements per sensor)
         max_pages = min(max_pages, 16)
 
         while page <= max_pages:
@@ -154,7 +193,7 @@ class IncrementalDownloaderParallel:
         return all_data
 
     def process_location_parallel(self, location: Dict, output_path: Path,
-                                parameters: Optional[List[str]] = None) -> int:
+                                parameters: Optional[List[str]] = None, max_requests: Optional[int] = None) -> int:
         location_id = location['id']
         location_name = location.get('name', 'Unknown')
         coords = location.get('coordinates', {})
@@ -175,9 +214,19 @@ class IncrementalDownloaderParallel:
         if not sensors:
             return 0
 
-        print(f"  Processing {len(sensors)} sensors in parallel...")
+        print(f"\n  Location: {location_name} (ID: {location_id})")
+        if max_requests:
+            print(f"  Processing {len(sensors)} sensors in parallel (max {max_requests} requests)...")
+        else:
+            print(f"  Processing {len(sensors)} sensors in parallel...")
+        
+        # If max_requests is specified, limit pages per sensor
+        if max_requests and max_requests < len(sensors) * 3:
+            max_pages_override = max(1, max_requests // len(sensors))
+            sensor_data = self.fetch_sensor_pages_parallel_sync(sensors, location_name=location_name, max_pages_per_sensor=max_pages_override)
+        else:
+            sensor_data = self.fetch_sensor_pages_parallel_sync(sensors, location_name=location_name)
 
-        sensor_data = self.fetch_sensor_pages_parallel_sync(sensors)
         for sensor_id, measurements in sensor_data.items():
             param_name = sensor_info.get(sensor_id, 'unknown')
 
@@ -228,14 +277,14 @@ class IncrementalDownloaderParallel:
         batch_completed = []
         batch_measurements = 0
         
-        def process_single_location(loc_info: Tuple[int, Dict]) -> Tuple[int, int]:
-            _, location = loc_info
+        def process_single_location(loc_info: Tuple[int, Dict, int]) -> Tuple[int, int]:
+            idx, location, max_requests = loc_info
             loc_id = location['id']
             
             try:
                 if self.is_parallel and len(location.get('sensors', [])) > 3:
                     loc_measurements = self.process_location_parallel(
-                        location, output_path, parameters
+                        location, output_path, parameters, max_requests=max_requests
                     )
                 else:
                     sequential_downloader = self._get_sequential_downloader()
@@ -254,19 +303,82 @@ class IncrementalDownloaderParallel:
         
         # Estimate how many locations we can process concurrently
         available_keys = getattr(self.client.api, 'num_keys', 1)
-        max_concurrent_locations = max(1, min(
-            len(locations_batch),
-            int(available_keys / max(avg_sensors_per_location * 3, 1))  # Assume 3 pages per sensor
-        ))
+        # Calculate how many locations we can process without key reuse
+        # With many keys, we need to ensure no key is used twice
+        if available_keys >= 10:
+            # Calculate requests per location (sensors * pages)
+            pages_per_sensor = 3 if available_keys >= 20 else 2
+            requests_per_location = int(avg_sensors_per_location * pages_per_sensor)
+            
+            # Calculate how many full locations we can handle
+            full_locations = int(available_keys / requests_per_location)
+            remaining_keys = available_keys % requests_per_location
+            
+            # If we have enough remaining keys for a partial location, add one more
+            # Only if remaining keys >= sensors (at least 1 page per sensor)
+            if remaining_keys >= avg_sensors_per_location:
+                max_concurrent_locations = min(len(locations_batch), full_locations + 1)
+            else:
+                max_concurrent_locations = min(len(locations_batch), full_locations)
+            
+            # Ensure at least 1 location
+            max_concurrent_locations = max(1, max_concurrent_locations)
+        else:
+            max_concurrent_locations = max(1, min(
+                len(locations_batch),
+                int(available_keys / max(avg_sensors_per_location * 3, 1))
+            ))
+        
+        # Calculate key budget for each location
+        pages_per_sensor = 3 if available_keys >= 20 else 2
+        requests_per_location = int(avg_sensors_per_location * pages_per_sensor)
+        
+        # Assign key budgets to each location
+        location_budgets = []
+        keys_used = 0
+        for i in range(max_concurrent_locations):
+            if i < int(available_keys / requests_per_location):
+                # Full budget
+                location_budgets.append(requests_per_location)
+                keys_used += requests_per_location
+            else:
+                # Partial budget with remaining keys
+                remaining = available_keys - keys_used
+                if remaining > 0:
+                    location_budgets.append(remaining)
+                    keys_used += remaining
         
         print(f"\n  Processing batch of {len(locations_batch)} locations ({max_concurrent_locations} concurrently)...")
+        print(f"  Available keys: {available_keys}, Avg sensors/location: {avg_sensors_per_location:.1f}")
+        if available_keys >= 10:
+            remaining_keys = available_keys % requests_per_location
+            print(f"  Requests per location: {requests_per_location} ({pages_per_sensor} pages × {avg_sensors_per_location:.1f} sensors)")
+            print(f"  Key allocation: {int(available_keys / requests_per_location)} full locations + {remaining_keys} spare keys")
+            if max_concurrent_locations > 1 and location_budgets:
+                print(f"  Location budgets: {location_budgets} requests each")
+        
+        # Show which locations are in this batch
+        loc_names = [loc[1].get('name', f'ID:{loc[1]["id"]}') for loc in locations_batch[:5]]
+        if len(locations_batch) > 5:
+            loc_names.append(f"... and {len(locations_batch)-5} more")
+        print(f"  Locations in batch: {', '.join(loc_names)}")
+        
+        # Create tuples with location info and budget
+        locations_with_budget = [
+            (idx, loc, location_budgets[i]) 
+            for i, (idx, loc) in enumerate(locations_batch[:max_concurrent_locations])
+        ]
         
         with ThreadPoolExecutor(max_workers=max_concurrent_locations) as executor:
-            results = list(executor.map(process_single_location, locations_batch))
+            results = list(executor.map(process_single_location, locations_with_budget))
         
         for loc_id, measurements in results:
             batch_completed.append(loc_id)
             batch_measurements += measurements
+        
+        # Print cumulative key usage statistics
+        if hasattr(self.client.api, '_print_stats'):
+            self.client.api._print_stats()
         
         return batch_completed, batch_measurements
 
@@ -360,18 +472,16 @@ class IncrementalDownloaderParallel:
         sensors_per_key_threshold = 0.7  # We want at least 70% of keys to be utilized
         max_avg_sensors = available_keys * sensors_per_key_threshold / 3  # 3 pages per sensor estimate
         
-        use_parallel_locations = self.is_parallel and available_keys > 10 and avg_sensors < max_avg_sensors
+        use_parallel_locations = self.is_parallel and available_keys > 1 and avg_sensors < max_avg_sensors
         
         if use_parallel_locations:
             print(f"  → Using PARALLEL LOCATION PROCESSING")
             print(f"  → Will process multiple locations concurrently to utilize all {available_keys} API keys")
-        else:
-            print(f"  → Using SEQUENTIAL location processing (parallel sensors within each location)")
-            if avg_sensors >= max_avg_sensors:
-                print(f"  → Reason: High sensor density ({avg_sensors:.1f} sensors/location) can utilize all keys")
             
             # Process locations in batches
-            batch_size = max(2, min(10, int(available_keys / (avg_sensors * 3))))  # 3 pages per sensor estimate
+            # More aggressive batching: use more locations per batch when we have many keys
+            batch_size = max(5, min(30, int(available_keys / max(avg_sensors * 1.5, 1))))  # 1.5 pages per sensor estimate
+            print(f"  → Batch size: {batch_size} locations per batch")
             
             i = start_index
             while i < len(active_locations):
@@ -385,7 +495,6 @@ class IncrementalDownloaderParallel:
                 batch_start = time.time()
                 
                 try:
-                    # Save checkpoint before processing batch
                     self.save_checkpoint(country_code, i, total_locations, completed_locations,
                                        str(output_path), batch[0][1]['id'])
                     
@@ -418,6 +527,10 @@ class IncrementalDownloaderParallel:
                           f"Total: {total_measurements:,} measurements | ETA: {eta:.1f} min")
         
         else:
+            print(f"  → Using SEQUENTIAL location processing (parallel sensors within each location)")
+            if self.is_parallel and avg_sensors >= max_avg_sensors:
+                print(f"  → Reason: High sensor density ({avg_sensors:.1f} sensors/location) can utilize all keys")
+            
             # Original sequential processing for high sensor count locations
             for i, location in enumerate(active_locations[start_index:], start=start_index):
                 loc_id = location['id']
