@@ -484,7 +484,7 @@ class IncrementalDownloaderParallel:
                 batch_start = time.time()
                 
                 try:
-                    self.save_checkpoint(country_code, i, total_locations, completed_locations,
+                    self.save_checkpoint(country_code, start_index + i, total_locations, completed_locations,
                                        str(output_path), batch[0][1]['id'])
                     
                     batch_completed, batch_measurements = self.process_locations_batch(
