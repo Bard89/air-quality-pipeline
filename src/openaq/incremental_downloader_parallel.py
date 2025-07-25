@@ -490,12 +490,12 @@ class IncrementalDownloaderParallel:
             batch_size = max(5, min(30, int(available_keys / max(avg_sensors * 1.5, 1))))  # 1.5 pages per sensor estimate
             print(f"  → Batch size: {batch_size} locations per batch")
             
-            i = start_index
+            i = 0  # Start from 0, since active_locations is already sliced
             while i < len(active_locations):
                 batch_end = min(i + batch_size, len(active_locations))
                 batch = [(idx, loc) for idx, loc in enumerate(active_locations[i:batch_end], start=i)]
                 
-                current_start = already_completed + i + 1
+                current_start = start_index + i + 1
                 current_end = min(current_start + len(batch) - 1, total_locations)
                 print(f"\nProcessing locations {current_start}-{current_end} of {total_locations}")
                 for _, loc in batch:
