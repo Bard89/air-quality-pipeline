@@ -7,14 +7,14 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 
+from src.core.checkpoint_manager import CheckpointManager
 from src.openaq.client import OpenAQClient
 class IncrementalDownloaderParallel:
 
     def __init__(self, client: OpenAQClient):
         self.client = client
-        self.checkpoint_dir = Path('data/openaq/checkpoints')
-        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        self.checkpoint_file = None
+        self.checkpoint_manager = CheckpointManager(Path('data/openaq/checkpoints'))
+        self.checkpoint_file = None  # Keep for compatibility
 
         self.is_parallel = isinstance(getattr(client.api, '__class__', None).__name__, str) and \
                           'Parallel' in client.api.__class__.__name__
@@ -30,17 +30,10 @@ class IncrementalDownloaderParallel:
     def save_checkpoint(self, country_code: str, location_index: int, total_locations: int,
                        completed_locations: List[int], output_file: str,
                        current_location_id: Optional[int] = None):
-        checkpoint = {
-            'country_code': country_code,
-            'location_index': location_index,
-            'total_locations': total_locations,
-            'completed_locations': completed_locations,
-            'output_file': output_file,
-            'current_location_id': current_location_id,
-            'timestamp': datetime.now().isoformat()
-        }
-        with open(self.checkpoint_file, 'w', encoding='utf-8') as f:
-            json.dump(checkpoint, f, indent=2)
+        self.checkpoint_manager.save_checkpoint(
+            country_code, location_index, total_locations,
+            completed_locations, output_file, current_location_id
+        )
 
     def load_checkpoint(self):
         if self.checkpoint_file and self.checkpoint_file.exists():
@@ -387,33 +380,20 @@ class IncrementalDownloaderParallel:
                            max_locations: Optional[int] = None,
                            resume: bool = True) -> str:
 
-        checkpoint = None
+        # Use checkpoint manager to handle resume logic
+        output_path, checkpoint = self.checkpoint_manager.get_or_create_output_file(country_code, resume)
+        
         completed_locations = []
         start_index = 0
         
-        param_str = '_'.join(parameters) if parameters else 'all'
-        checkpoint_filename = f"checkpoint_{country_code.lower()}_{param_str}_parallel.json"
-        self.checkpoint_file = self.checkpoint_dir / checkpoint_filename
-
-        if resume and self.checkpoint_file.exists():
-            checkpoint = self.load_checkpoint()
-            if checkpoint and checkpoint['country_code'] == country_code:
-                print(f"\nResuming from checkpoint (location {checkpoint['location_index']}/{checkpoint['total_locations']})")
-                completed_locations = checkpoint['completed_locations']
-                start_index = checkpoint['location_index']
-                output_path = Path(checkpoint['output_file'])
-            else:
-                checkpoint = None
-
-        if not checkpoint:
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = f"{country_code.lower()}_airquality_all_{timestamp}.csv"
-            output_path = Path(f'data/openaq/processed/{filename}')
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-
+        if checkpoint:
+            print(f"\nResuming from checkpoint (location {checkpoint['location_index']}/{checkpoint['total_locations']})")
+            completed_locations = checkpoint['completed_locations']
+            start_index = checkpoint['location_index']
+        else:
+            # New download - create CSV headers
             if output_path.exists():
                 output_path.unlink()
-
             headers = ['datetime', 'value', 'sensor_id', 'location_id', 'location_name',
                       'city', 'country', 'latitude', 'longitude', 'parameter', 'unit']
             pd.DataFrame(columns=headers).to_csv(output_path, index=False)
