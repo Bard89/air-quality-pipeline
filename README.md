@@ -38,26 +38,28 @@ pip install -r requirements.txt
 
 ## Usage
 
+**Note**: The scripts have executable permissions, so you can also run them directly with `./script_name.py` on Unix-like systems.
+
 ### Download Air Quality Data
 
 ```bash
 # List available countries
-./download_air_quality.py --list-countries
+python download_air_quality.py --list-countries
 
 # Download ALL data from India (no date filtering)
-./download_air_quality.py --country IN --country-wide
+python download_air_quality.py --country IN --country-wide
 
 # Download with specific parameters
-./download_air_quality.py --country US --parameters pm25,pm10,no2 --country-wide
+python download_air_quality.py --country US --parameters pm25,pm10,no2 --country-wide
 
 # Limit to top 100 locations for faster downloads
-./download_air_quality.py --country IN --country-wide --max-locations 100
+python download_air_quality.py --country IN --country-wide --max-locations 100
 
 # Download all PM2.5 data from top 50 locations
-./download_air_quality.py --country IN --parameters pm25 --country-wide --max-locations 50
+python download_air_quality.py --country IN --parameters pm25 --country-wide --max-locations 50
 
 # Use parallel mode for 2-3x faster downloads (requires multiple API keys)
-./download_air_quality.py --country IN --country-wide --max-locations 10 --parallel
+python download_air_quality.py --country IN --country-wide --max-locations 10 --parallel
 ```
 
 ### Command Options
@@ -143,11 +145,14 @@ Each download includes:
 
 ```
 ├── download_air_quality.py   # Main CLI tool
+├── transform_to_wide.py      # Convert to wide format
+├── view_checkpoints.py       # View download history
 ├── src/
 │   ├── core/                # Reusable components
 │   │   ├── api_client.py    # Rate-limited HTTP client
 │   │   ├── api_client_multi_key.py  # Multi-key rotation for faster downloads
 │   │   ├── api_client_parallel.py   # Parallel API client for concurrent requests
+│   │   ├── checkpoint_manager.py    # Resume capability for downloads
 │   │   └── data_storage.py  # File management
 │   ├── openaq/              # OpenAQ-specific modules
 │   │   ├── client.py        # API wrapper
@@ -156,7 +161,8 @@ Each download includes:
 │   │   ├── incremental_downloader_all.py  # Downloads all sensor data
 │   │   └── incremental_downloader_parallel.py  # Parallel downloader with location batching
 │   └── utils/
-│       └── data_analyzer.py # Data analysis
+│       ├── data_analyzer.py # Data analysis
+│       └── csv_to_wide_format.py  # Wide format conversion
 └── data/                    # Downloaded data (gitignored)
 ```
 
@@ -171,7 +177,19 @@ analyze_dataset('data/openaq/processed/in_airquality_all_20241215_123045.csv')
 ### Transform Data Format
 ```bash
 # Convert long format to wide format (one row per location/hour)
-python3 transform_to_wide.py data/openaq/processed/in_airquality_all_20241215_123045.csv
+python transform_to_wide.py data/openaq/processed/in_airquality_all_20241215_123045.csv
+```
+
+### View Download History
+```bash
+# View all download checkpoints
+python view_checkpoints.py
+
+# Filter by country
+python view_checkpoints.py --country JP
+
+# Show details for specific file
+python view_checkpoints.py --file data/openaq/processed/jp_airquality_all_20241215_123045.csv
 ```
 
 ### High-Pollution Countries
@@ -196,10 +214,10 @@ Use `--country-wide` to download all historical data from a country:
 **Example for full country:**
 ```bash
 # Download ALL PM2.5 data from top 100 locations in India
-./download_air_quality.py --country IN --parameters pm25 --country-wide --max-locations 100
+python download_air_quality.py --country IN --parameters pm25 --country-wide --max-locations 100
 
 # Download EVERYTHING from India (safe to interrupt)
-./download_air_quality.py --country IN --country-wide
+python download_air_quality.py --country IN --country-wide
 
 # If interrupted, just run the same command again - it will resume automatically!
 ```
@@ -213,11 +231,11 @@ Use `--country-wide` to download all historical data from a country:
 **Example:**
 ```bash
 # Start download (might take hours)
-./download_air_quality.py --country IN --country-wide
+python download_air_quality.py --country IN --country-wide
 
 # Press Ctrl+C after 2 hours...
 # Later, resume with same command:
-./download_air_quality.py --country IN --country-wide
+python download_air_quality.py --country IN --country-wide
 # Output: "Resuming from checkpoint (location 150/500)"
 ```
 
@@ -230,16 +248,16 @@ Use `--country-wide` to download all historical data from a country:
 
 ```bash
 # Always use --country-wide for bulk downloads
-./download_air_quality.py --country IN --country-wide
+python download_air_quality.py --country IN --country-wide
 
 # Combine with parameter filtering to reduce data size
-./download_air_quality.py --country CN --parameters pm25,pm10 --country-wide --max-locations 100
+python download_air_quality.py --country CN --parameters pm25,pm10 --country-wide --max-locations 100
 
 # For testing, limit locations
-./download_air_quality.py --country US --country-wide --max-locations 10
+python download_air_quality.py --country US --country-wide --max-locations 10
 
 # Use parallel mode with multiple API keys for fastest downloads
-./download_air_quality.py --country VN --country-wide --parallel
+python download_air_quality.py --country VN --country-wide --parallel
 ```
 
 ### Parallel Mode Features
