@@ -239,6 +239,29 @@ python download_air_quality.py --country IN --country-wide
 # Output: "Resuming from checkpoint (location 150/500)"
 ```
 
+**Checkpoint System:**
+The download system uses an advanced checkpoint manager that:
+- **Automatic resume**: Finds existing downloads and continues from last position
+- **History tracking**: Maintains history of all checkpoint saves
+- **Smart file matching**: Associates checkpoints with their output CSV files
+- **No data loss**: Even if script crashes, all progress is preserved
+
+**Checkpoint files location:**
+- Main checkpoint: `data/openaq/checkpoints/checkpoint_{country}_all_parallel.json`
+- History file: `data/openaq/checkpoints/checkpoint_history.json`
+
+**Manual checkpoint management:**
+```bash
+# View all download history
+python view_checkpoints.py
+
+# View specific country downloads
+python view_checkpoints.py --country JP
+
+# Fix checkpoint if needed (counts actual CSV records)
+python fix_checkpoint_history.py
+```
+
 **Important Notes:**
 - The tool downloads ALL available historical data from each sensor because the OpenAQ API v3 ignores date filtering parameters
 - Maximum 16,000 measurements per sensor due to API page limit (pages 17+ consistently timeout)
