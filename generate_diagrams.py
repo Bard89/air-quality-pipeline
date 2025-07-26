@@ -31,23 +31,29 @@ def generate_pydeps_diagram():
     output_dir = Path("docs/diagrams")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    subprocess.run([
+    result = subprocess.run([
         "pydeps", "src",
         "--max-bacon", "2",
         "--cluster",
         "--rankdir", "TB",
         "-o", str(output_dir / "dependencies.svg"),
         "--no-show"
-    ], check=False)
+    ], capture_output=True)
+    
+    if result.returncode != 0:
+        print(f"Warning: Failed to generate overall dependencies: {result.stderr.decode()}")
 
-    subprocess.run([
+    result = subprocess.run([
         "pydeps", "src/core",
         "--max-bacon", "3",
         "-o", str(output_dir / "core_dependencies.svg"),
         "--no-show"
-    ], check=False)
-
-    print(f"Dependency diagrams saved to {output_dir}")
+    ], capture_output=True)
+    
+    if result.returncode != 0:
+        print(f"Warning: Failed to generate core dependencies: {result.stderr.decode()}")
+    else:
+        print(f"Dependency diagrams saved to {output_dir}")
 
 
 def generate_pyreverse_diagrams():
@@ -56,16 +62,19 @@ def generate_pyreverse_diagrams():
     output_dir = Path("docs/diagrams")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    subprocess.run([
+    result = subprocess.run([
         "pyreverse",
         "-o", "svg",
         "-p", "AirQuality",
         "--colorized",
         "src/domain",
         "-d", str(output_dir)
-    ], check=False)
+    ], capture_output=True)
+    
+    if result.returncode != 0:
+        print(f"Warning: Failed to generate class diagram: {result.stderr.decode()}")
 
-    subprocess.run([
+    result = subprocess.run([
         "pyreverse",
         "-o", "svg",
         "-p", "AirQualityPackages",
@@ -73,9 +82,12 @@ def generate_pyreverse_diagrams():
         "-k",
         "src",
         "-d", str(output_dir)
-    ], check=False)
-
-    print(f"UML diagrams saved to {output_dir}")
+    ], capture_output=True)
+    
+    if result.returncode != 0:
+        print(f"Warning: Failed to generate package diagram: {result.stderr.decode()}")
+    else:
+        print(f"UML diagrams saved to {output_dir}")
 
 
 def extract_imports(file_path):
