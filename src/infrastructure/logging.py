@@ -2,26 +2,26 @@ import logging
 import logging.handlers
 import json
 import sys
+import time
+import asyncio
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
+from functools import wraps
 import traceback
+from contextvars import ContextVar, copy_context
 from pythonjsonlogger import jsonlogger
 
 
+# Context variable for async-safe logging context
+log_context: ContextVar[Dict[str, Any]] = ContextVar('log_context', default={})
+
+
 class ContextFilter(logging.Filter):
-    def __init__(self):
-        super().__init__()
-        self.context = {}
-
-    def set_context(self, **kwargs):
-        self.context.update(kwargs)
-
-    def clear_context(self):
-        self.context.clear()
-
     def filter(self, record):
-        for key, value in self.context.items():
+        # Get context from contextvars instead of instance variable
+        context = log_context.get()
+        for key, value in context.items():
             setattr(record, key, value)
         return True
 
@@ -107,47 +107,67 @@ def get_logger(name: str) -> logging.Logger:
 
 class LogContext:
     def __init__(self, **kwargs):
-        self.context = kwargs
-        self.filter = None
+        self.new_context = kwargs
+        self.previous_context = None
 
     def __enter__(self):
-        for handler in logging.getLogger().handlers:
-            for filter in handler.filters:
-                if isinstance(filter, ContextFilter):
-                    self.filter = filter
-                    filter.set_context(**self.context)
-                    break
+        # Save current context
+        self.previous_context = log_context.get().copy()
+        # Update with new context
+        updated_context = self.previous_context.copy()
+        updated_context.update(self.new_context)
+        log_context.set(updated_context)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.filter:
-            self.filter.clear_context()
+        # Restore previous context
+        log_context.set(self.previous_context)
 
 
 def log_execution_time(logger: logging.Logger):
     def decorator(func):
-        import time
-        from functools import wraps
-        
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            start_time = time.time()
-            try:
-                result = func(*args, **kwargs)
-                duration = (time.time() - start_time) * 1000
-                logger.info(
-                    f"{func.__name__} completed",
-                    extra={"duration_ms": duration}
-                )
-                return result
-            except Exception as e:
-                duration = (time.time() - start_time) * 1000
-                logger.error(
-                    f"{func.__name__} failed",
-                    extra={"duration_ms": duration},
-                    exc_info=True
-                )
-                raise
-        
-        return wrapper
+        if asyncio.iscoroutinefunction(func):
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                start_time = time.time()
+                try:
+                    result = await func(*args, **kwargs)
+                    duration = (time.time() - start_time) * 1000
+                    logger.info(
+                        f"{func.__name__} completed",
+                        extra={"duration_ms": duration}
+                    )
+                    return result
+                except Exception as e:
+                    duration = (time.time() - start_time) * 1000
+                    logger.error(
+                        f"{func.__name__} failed",
+                        extra={"duration_ms": duration},
+                        exc_info=True
+                    )
+                    raise
+            
+            return async_wrapper
+        else:
+            @wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                start_time = time.time()
+                try:
+                    result = func(*args, **kwargs)
+                    duration = (time.time() - start_time) * 1000
+                    logger.info(
+                        f"{func.__name__} completed",
+                        extra={"duration_ms": duration}
+                    )
+                    return result
+                except Exception as e:
+                    duration = (time.time() - start_time) * 1000
+                    logger.error(
+                        f"{func.__name__} failed",
+                        extra={"duration_ms": duration},
+                        exc_info=True
+                    )
+                    raise
+            
+            return sync_wrapper
     
     return decorator
