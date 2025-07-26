@@ -18,12 +18,26 @@ class OpenAQDataSource(DataSource):
         api_keys: List[str],
         base_url: str = "https://api.openaq.org/v3",
         rate_limit_per_key: int = 60,
-        timeout: int = 30
+        timeout: int = 30,
+        max_pages_per_request: int = 10
     ):
+        # Validate inputs
+        if not api_keys:
+            raise ValueError("At least one API key must be provided")
+        if not all(isinstance(key, str) and key.strip() for key in api_keys):
+            raise ValueError("All API keys must be non-empty strings")
+        if not base_url or not base_url.startswith(("http://", "https://")):
+            raise ValueError("Base URL must be a valid HTTP(S) URL")
+        if rate_limit_per_key <= 0:
+            raise ValueError("Rate limit per key must be positive")
+        if timeout <= 0:
+            raise ValueError("Timeout must be positive")
+        
         self.api_keys = api_keys
-        self.base_url = base_url
+        self.base_url = base_url.rstrip('/')
         self.rate_limit_per_key = rate_limit_per_key
         self.timeout = timeout
+        self.max_pages_per_request = max_pages_per_request
         self._sessions: List[aiohttp.ClientSession] = []
         self._key_index = 0
         self._last_request_times = [0.0] * len(api_keys)
@@ -86,6 +100,8 @@ class OpenAQDataSource(DataSource):
             raise NetworkException(f"Network error: {str(e)}", url=url)
 
     async def list_countries(self) -> List[Dict[str, str]]:
+        # Note: API may have more than 200 countries, but this is typically sufficient
+        # for air quality monitoring which focuses on countries with sensor networks
         response = await self._request("/countries", {"limit": 200})
         return [
             {
@@ -147,7 +163,8 @@ class OpenAQDataSource(DataSource):
                 break
             
             page += 1
-            if page > 10:
+            if page > self.max_pages_per_request:
+                logger.info(f"Reached max pages limit ({self.max_pages_per_request}) for location search")
                 break
         
         return locations[:limit] if limit else locations
@@ -226,7 +243,7 @@ class OpenAQDataSource(DataSource):
                 page += 1
                 
             except NetworkException as e:
-                if e.status_code == 504 and page > 16:
+                if e.status_code == 504:
                     logger.warning(f"Timeout on page {page}, stopping")
                     break
                 raise
