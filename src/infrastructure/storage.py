@@ -1,6 +1,7 @@
 from typing import List, Optional, Dict, Any
 import csv
 import json
+import io
 from pathlib import Path
 from datetime import datetime
 import asyncio
@@ -85,14 +86,23 @@ class CSVStorage(Storage):
             }
             rows.append(row)
         
-        if not self._header_written and rows:
-            header = ','.join(rows[0].keys()) + '\n'
-            await self._file_handle.write(header)
-            self._header_written = True
+        # Use StringIO and csv.writer for proper CSV escaping
+        output = io.StringIO()
         
-        for row in rows:
-            line = ','.join(str(v) for v in row.values()) + '\n'
-            await self._file_handle.write(line)
+        if not self._header_written and rows:
+            writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+            writer.writeheader()
+            header_str = output.getvalue()
+            await self._file_handle.write(header_str)
+            self._header_written = True
+            output.truncate(0)
+            output.seek(0)
+        
+        if rows:
+            writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+            writer.writerows(rows)
+            data_str = output.getvalue()
+            await self._file_handle.write(data_str)
         
         await self._file_handle.flush()
         self._measurement_count += len(self._buffer)

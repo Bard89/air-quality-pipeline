@@ -83,7 +83,7 @@ class AirQualityDownloader:
             
             task = asyncio.create_task(
                 self._download_location_with_limit(
-                    location, job, i, len(locations), location_semaphore
+                    location, job, i, len(locations), location_semaphore, completed_ids
                 )
             )
             tasks.append(task)
@@ -118,10 +118,11 @@ class AirQualityDownloader:
         job: DownloadJob,
         index: int,
         total: int,
-        semaphore: asyncio.Semaphore
+        semaphore: asyncio.Semaphore,
+        completed_ids: set
     ) -> None:
         async with semaphore:
-            await self._download_location(location, job, index, total)
+            await self._download_location(location, job, index, total, completed_ids)
 
     @MetricsMiddleware.track_download("location")
     async def _download_location(
@@ -129,7 +130,8 @@ class AirQualityDownloader:
         location: Location,
         job: DownloadJob,
         index: int,
-        total: int
+        total: int,
+        completed_ids: set
     ) -> None:
         logger.info(
             f"Downloading location {index + 1}/{total}: {location.name} ({location.id})"
@@ -156,9 +158,12 @@ class AirQualityDownloader:
             
             await asyncio.gather(*tasks, return_exceptions=True)
             
+            # Update completed locations list
+            completed_ids.add(location.id)
+            
             checkpoint = {
                 "location_index": index + 1,
-                "completed_locations": [location.id],
+                "completed_locations": list(completed_ids),
                 "total_locations": total,
                 "country_code": job.country_code,
                 "current_location_id": location.id
