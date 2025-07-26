@@ -1,19 +1,20 @@
 import asyncio
 import time
-from typing import TypeVar, Callable, Optional, Type, Tuple, Union, Any
+from typing import Callable, Optional, Type, Tuple, Union, Any
 from functools import wraps
 import random
 import logging
+from abc import ABC, abstractmethod
 from ..domain.exceptions import RateLimitException, NetworkException, DataSourceException
 
 
 logger = logging.getLogger(__name__)
-T = TypeVar('T')
 
 
-class RetryStrategy:
+class RetryStrategy(ABC):
+    @abstractmethod
     def calculate_delay(self, attempt: int) -> float:
-        raise NotImplementedError
+        pass
 
 
 class ExponentialBackoff(RetryStrategy):
@@ -62,14 +63,10 @@ def retry(
         if asyncio.iscoroutinefunction(func):
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
-                last_exception = None
-                
                 for attempt in range(1, max_attempts + 1):
                     try:
                         return await func(*args, **kwargs)
                     except retry_on as e:
-                        last_exception = e
-                        
                         if isinstance(e, RateLimitException) and e.retry_after:
                             delay = e.retry_after
                         else:
@@ -88,21 +85,15 @@ def retry(
                         else:
                             logger.error(f"Max retries reached for {func.__name__}")
                             raise
-                
-                raise last_exception
             
             return async_wrapper
         else:
             @wraps(func)
             def sync_wrapper(*args, **kwargs):
-                last_exception = None
-                
                 for attempt in range(1, max_attempts + 1):
                     try:
                         return func(*args, **kwargs)
                     except retry_on as e:
-                        last_exception = e
-                        
                         if isinstance(e, RateLimitException) and e.retry_after:
                             delay = e.retry_after
                         else:
@@ -121,8 +112,6 @@ def retry(
                         else:
                             logger.error(f"Max retries reached for {func.__name__}")
                             raise
-                
-                raise last_exception
             
             return sync_wrapper
     
@@ -130,6 +119,10 @@ def retry(
 
 
 class CircuitBreaker:
+    """
+    Circuit breaker pattern implementation for async functions only.
+    Prevents cascading failures by opening after threshold failures.
+    """
     def __init__(
         self,
         failure_threshold: int = 5,
@@ -142,29 +135,33 @@ class CircuitBreaker:
         self.failure_count = 0
         self.last_failure_time = 0
         self.state = "closed"
+        self._lock = asyncio.Lock()
 
     def __call__(self, func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            if self.state == "open":
-                if time.time() - self.last_failure_time > self.recovery_timeout:
-                    self.state = "half-open"
-                else:
-                    raise DataSourceException("Circuit breaker is open")
+            async with self._lock:
+                if self.state == "open":
+                    if time.time() - self.last_failure_time > self.recovery_timeout:
+                        self.state = "half-open"
+                    else:
+                        raise DataSourceException("Circuit breaker is open")
 
             try:
                 result = await func(*args, **kwargs)
-                if self.state == "half-open":
-                    self.state = "closed"
-                    self.failure_count = 0
+                async with self._lock:
+                    if self.state == "half-open":
+                        self.state = "closed"
+                        self.failure_count = 0
                 return result
             except self.expected_exception as e:
-                self.failure_count += 1
-                self.last_failure_time = time.time()
-                
-                if self.failure_count >= self.failure_threshold:
-                    self.state = "open"
-                    logger.error(f"Circuit breaker opened for {func.__name__}")
+                async with self._lock:
+                    self.failure_count += 1
+                    self.last_failure_time = time.time()
+                    
+                    if self.failure_count >= self.failure_threshold:
+                        self.state = "open"
+                        logger.error(f"Circuit breaker opened for {func.__name__}")
                 
                 raise
 
