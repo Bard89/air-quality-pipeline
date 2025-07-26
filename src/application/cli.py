@@ -43,7 +43,8 @@ async def main():
     parser.add_argument(
         "--country-wide",
         action="store_true",
-        help="Download all data from country"
+        required=True,
+        help="Download all data from country (required due to API v3 limitation)"
     )
     
     parser.add_argument(
@@ -120,10 +121,6 @@ async def main():
         
         if not args.country:
             print("Error: --country is required")
-            sys.exit(1)
-        
-        if not args.country_wide:
-            print("Error: --country-wide is required (API v3 limitation)")
             sys.exit(1)
         
         parameters = []
