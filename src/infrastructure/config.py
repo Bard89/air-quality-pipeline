@@ -2,6 +2,8 @@ from pydantic import BaseModel, Field, validator, root_validator
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 import os
+import json
+import yaml
 from dotenv import load_dotenv
 
 
@@ -57,20 +59,28 @@ class DataSourceConfig(BaseModel):
     @validator('api_keys', pre=True)
     def load_api_keys_from_env(cls, v, values):
         if not v and 'name' in values:
-            keys = []
             name_upper = values['name'].upper()
             
-            for i in range(1, 101):
-                key = os.getenv(f"{name_upper}_API_KEY_{i:02d}")
-                if key:
-                    keys.append(key)
+            # First check for single key
+            single_key = os.getenv(f"{name_upper}_API_KEY")
+            if single_key:
+                return [single_key]
             
-            if not keys:
-                single_key = os.getenv(f"{name_upper}_API_KEY")
-                if single_key:
-                    keys.append(single_key)
+            # Then check for numbered keys
+            keys = []
+            prefix = f"{name_upper}_API_KEY_"
+            for env_key, env_value in os.environ.items():
+                if env_key.startswith(prefix):
+                    suffix = env_key[len(prefix):]
+                    if suffix.isdigit() and 1 <= int(suffix) <= 100:
+                        keys.append((int(suffix), env_value))
             
-            return keys
+            # Sort by number and return values
+            if keys:
+                keys.sort(key=lambda x: x[0])
+                return [key[1] for key in keys]
+            
+            return []
         return v
 
 
@@ -105,9 +115,6 @@ class ApplicationConfig(BaseModel):
 
     @classmethod
     def from_file(cls, config_path: Path) -> 'ApplicationConfig':
-        import json
-        import yaml
-        
         if not config_path.exists():
             raise FileNotFoundError(f"Config file not found: {config_path}")
         
@@ -127,8 +134,12 @@ class ApplicationConfig(BaseModel):
         
         config = cls()
         
+        # Get available data sources from environment or use defaults
+        available_sources = os.getenv('AVAILABLE_DATA_SOURCES', 'openaq,purpleair,waqi').split(',')
+        
         config.data_sources = []
-        for source_name in ['openaq', 'purpleair', 'waqi']:
+        for source_name in available_sources:
+            source_name = source_name.strip()
             source_config = DataSourceConfig(
                 name=source_name,
                 type=source_name,
