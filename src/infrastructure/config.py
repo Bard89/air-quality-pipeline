@@ -58,6 +58,15 @@ class DataSourceConfig(BaseModel):
 
     @validator('api_keys', pre=True)
     def load_api_keys_from_env(cls, v, values):
+        """
+        Load API keys from environment variables.
+        
+        Supports two formats:
+        - Single key: {NAME}_API_KEY
+        - Multiple keys: {NAME}_API_KEY_01, {NAME}_API_KEY_02, ..., {NAME}_API_KEY_99
+        
+        Note: Numbered keys MUST use zero-padded two-digit format (01, 02, etc.)
+        """
         if not v and 'name' in values:
             name_upper = values['name'].upper()
             
@@ -66,16 +75,19 @@ class DataSourceConfig(BaseModel):
             if single_key:
                 return [single_key]
             
-            # Then check for numbered keys
+            # Then check for numbered keys with zero-padded format
             keys = []
             prefix = f"{name_upper}_API_KEY_"
             for env_key, env_value in os.environ.items():
                 if env_key.startswith(prefix):
                     suffix = env_key[len(prefix):]
-                    if suffix.isdigit() and 1 <= int(suffix) <= 100:
-                        keys.append((int(suffix), env_value))
+                    # Enforce zero-padded two-digit format
+                    if len(suffix) == 2 and suffix.isdigit():
+                        key_num = int(suffix)
+                        if 1 <= key_num <= 99:
+                            keys.append((suffix, env_value))  # Keep suffix for stable sort
             
-            # Sort by number and return values
+            # Sort by suffix string (maintains zero-padded order)
             if keys:
                 keys.sort(key=lambda x: x[0])
                 return [key[1] for key in keys]
