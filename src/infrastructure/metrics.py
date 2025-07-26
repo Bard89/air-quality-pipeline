@@ -1,7 +1,7 @@
 from typing import Dict, Optional, Any, List
 import time
 import threading
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 import asyncio
@@ -31,7 +31,7 @@ class PrometheusMetrics(MetricsCollector):
         self.max_histogram_size = max_histogram_size
         self._metrics: Dict[str, MetricPoint] = {}
         self._counters: Dict[str, float] = defaultdict(float)
-        self._histograms: Dict[str, List[float]] = defaultdict(list)
+        self._histograms: Dict[str, deque] = defaultdict(lambda: deque(maxlen=self.max_histogram_size))
         self._lock = threading.Lock()
 
     def increment_counter(self, name: str, value: int = 1, tags: Optional[Dict[str, str]] = None) -> None:
@@ -72,9 +72,7 @@ class PrometheusMetrics(MetricsCollector):
         with self._lock:
             self._histograms[key].append(value)
             
-            values = self._histograms[key][-self.max_histogram_size:]
-            self._histograms[key] = values
-            
+            values = list(self._histograms[key])
             if values:
                 sorted_values = sorted(values)
                 count = len(sorted_values)
