@@ -53,7 +53,7 @@ class Location:
     name: str
     coordinates: Coordinates
     city: Optional[str] = None
-    country: str = ""
+    country: Optional[str] = None
     provider: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 

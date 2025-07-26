@@ -39,11 +39,11 @@ class ConfigurationException(AirQualityException):
 
 class NetworkException(AirQualityException):
     def __init__(self, message: str, url: Optional[str] = None, status_code: Optional[int] = None, **kwargs):
-        details = kwargs
-        if url:
+        details = kwargs.copy()  # Avoid modifying kwargs directly
+        if url and 'url' not in details:
             details['url'] = url
-        if status_code:
+        if status_code and 'status_code' not in details:
             details['status_code'] = status_code
         super().__init__(message, details)
-        self.url = url
-        self.status_code = status_code
+        self.url = details.get('url', url)
+        self.status_code = details.get('status_code', status_code)
