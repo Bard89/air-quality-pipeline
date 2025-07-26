@@ -64,6 +64,45 @@ class TestSensor:
         assert sensor.id == "sensor1"
         assert sensor.parameter == ParameterType.PM25
         assert sensor.is_active is True
+    
+    def test_sensor_hashable(self):
+        coords = Coordinates(latitude=Decimal("0"), longitude=Decimal("0"))
+        location = Location(id="loc1", name="Test", coordinates=coords)
+        
+        sensor1 = Sensor(
+            id="s1",
+            location=location,
+            parameter=ParameterType.PM25,
+            unit=MeasurementUnit.MICROGRAMS_PER_CUBIC_METER
+        )
+        
+        sensor2 = Sensor(
+            id="s1",
+            location=location,
+            parameter=ParameterType.PM10,  # Different parameter
+            unit=MeasurementUnit.MICROGRAMS_PER_CUBIC_METER
+        )
+        
+        # Same ID should produce same hash regardless of other attributes
+        assert hash(sensor1) == hash(sensor2)
+        
+        # Can be added to set
+        sensors_set = {sensor1, sensor2}
+        assert len(sensors_set) == 1
+    
+    def test_sensor_with_various_parameters(self):
+        coords = Coordinates(latitude=Decimal("0"), longitude=Decimal("0"))
+        location = Location(id="loc1", name="Test", coordinates=coords)
+        
+        # Test different parameter types
+        for param_type in [ParameterType.PM25, ParameterType.NO2, ParameterType.TEMPERATURE]:
+            sensor = Sensor(
+                id=f"sensor_{param_type.value}",
+                location=location,
+                parameter=param_type,
+                unit=MeasurementUnit.MICROGRAMS_PER_CUBIC_METER
+            )
+            assert sensor.parameter == param_type
 
 
 class TestMeasurement:
