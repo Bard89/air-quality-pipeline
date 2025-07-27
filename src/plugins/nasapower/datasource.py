@@ -243,8 +243,10 @@ class NASAPowerDataSource(DataSource):
                     'header': 'true'
                 }
                 
+                # logger.debug(f"Requesting NASA POWER data: {params['start']} to {params['end']} for {parameter}")
+                
                 try:
-                    async with session.get(url, params=params) as response:
+                    async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=60)) as response:
                         if response.status == 404:
                             logger.warning(f"No data available for {current_date} to {chunk_end}")
                             current_date = chunk_end + timedelta(days=1)
@@ -254,7 +256,7 @@ class NASAPowerDataSource(DataSource):
                             raise APIError(f"NASA POWER API error: {response.status}")
                             
                         data = await response.json()
-                        logger.debug(f"NASA POWER response keys: {list(data.keys())}")
+                        # logger.debug(f"NASA POWER response keys: {list(data.keys())}")
                         
                     param_data = {}
                     if 'properties' in data:
