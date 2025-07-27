@@ -3,16 +3,24 @@
 import argparse
 import asyncio
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 import logging
+import time
 
 from src.plugins import get_registry
 from src.domain.models import ParameterType, Location
 import json
 import csv
 from src.utils.data_analyzer import analyze_dataset
+
+try:
+    from tqdm import tqdm
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
+    print("Note: Install tqdm for progress bars: pip install tqdm")
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -115,18 +123,52 @@ async def download_weather_data(
             ]
             csv_writer = csv.DictWriter(csv_file, fieldnames=headers)
         
-        total_measurements = 0
+        total_measurements = checkpoint_data.get('total_measurements', 0) if checkpoint_data else 0
+        start_time = time.time()
         
-        for idx, location in enumerate(locations[start_location_idx:], start=start_location_idx):
-            logger.info(f"Processing location {idx + 1}/{len(locations)}: {location.name}")
+        # Create progress bar for locations
+        location_progress = None
+        if TQDM_AVAILABLE:
+            location_progress = tqdm(
+                enumerate(locations[start_location_idx:], start=start_location_idx),
+                total=len(locations) - start_location_idx,
+                desc="Locations",
+                unit="loc",
+                initial=0
+            )
+            location_iterator = location_progress
+        else:
+            location_iterator = enumerate(locations[start_location_idx:], start=start_location_idx)
+        
+        for idx, location in location_iterator:
+            if not TQDM_AVAILABLE:
+                elapsed = time.time() - start_time
+                speed = total_measurements / elapsed if elapsed > 0 else 0
+                logger.info(f"Processing location {idx + 1}/{len(locations)}: {location.name} | Speed: {speed:.1f} measurements/sec")
             
             try:
                 sensors = await datasource.get_sensors(location, parameters=param_types)
                 
-                for sensor in sensors:
-                    logger.info(f"  Fetching {sensor.parameter.value} data...")
+                # Create progress bar for sensors
+                sensor_progress = None
+                if TQDM_AVAILABLE:
+                    sensor_progress = tqdm(
+                        sensors,
+                        desc=f"  {location.name[:20]}",
+                        unit="param",
+                        leave=False
+                    )
+                    sensor_iterator = sensor_progress
+                else:
+                    sensor_iterator = sensors
+                
+                for sensor in sensor_iterator:
+                    if not TQDM_AVAILABLE:
+                        logger.info(f"  Fetching {sensor.parameter.value} data...")
                     
                     measurement_count = 0
+                    fetch_start = time.time()
+                    
                     async for measurements in datasource.get_measurements(
                         sensor,
                         start_date=start_date,
@@ -156,9 +198,37 @@ async def download_weather_data(
                         if rows:
                             csv_writer.writerows(rows)
                             csv_file.flush()
-                        
-                    logger.info(f"    Retrieved {measurement_count} measurements")
+                    
+                    fetch_time = time.time() - fetch_start
+                    if measurement_count > 0:
+                        fetch_speed = measurement_count / fetch_time if fetch_time > 0 else 0
+                        if TQDM_AVAILABLE and sensor_progress:
+                            sensor_progress.set_postfix({
+                                'measurements': measurement_count,
+                                'speed': f'{fetch_speed:.0f}/s'
+                            })
+                        else:
+                            logger.info(f"    Retrieved {measurement_count} measurements in {fetch_time:.1f}s ({fetch_speed:.0f}/s)")
+                    
                     total_measurements += measurement_count
+                
+                if TQDM_AVAILABLE and sensor_progress:
+                    sensor_progress.close()
+                
+                # Update progress statistics
+                elapsed = time.time() - start_time
+                locations_done = idx + 1 - start_location_idx
+                if locations_done > 0 and elapsed > 0:
+                    avg_time_per_location = elapsed / locations_done
+                    remaining_locations = len(locations) - idx - 1
+                    eta_seconds = avg_time_per_location * remaining_locations
+                    eta = datetime.now() + timedelta(seconds=eta_seconds)
+                    
+                    if TQDM_AVAILABLE and location_progress:
+                        location_progress.set_postfix({
+                            'measurements': f'{total_measurements:,}',
+                            'ETA': eta.strftime('%H:%M:%S')
+                        })
                 
                 checkpoint_data = {
                     'output_file': str(output_file),
@@ -174,8 +244,20 @@ async def download_weather_data(
                 logger.error(f"Error processing location {location.name}: {e}")
                 continue
         
-        logger.info(f"Download complete! Total measurements: {total_measurements}")
+        if TQDM_AVAILABLE and location_progress:
+            location_progress.close()
+        
+        # Calculate final statistics
+        total_time = time.time() - start_time
+        avg_speed = total_measurements / total_time if total_time > 0 else 0
+        
+        logger.info("=" * 80)
+        logger.info(f"Download complete!")
+        logger.info(f"Total measurements: {total_measurements:,}")
+        logger.info(f"Total time: {total_time/60:.1f} minutes")
+        logger.info(f"Average speed: {avg_speed:.1f} measurements/second")
         logger.info(f"Data saved to: {output_file}")
+        logger.info("=" * 80)
         
         if analyze and total_measurements > 0:
             logger.info("Analyzing dataset...")
