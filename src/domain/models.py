@@ -21,6 +21,12 @@ class ParameterType(str, Enum):
     PRESSURE = "pressure"
     WIND_SPEED = "windspeed"
     WIND_DIRECTION = "winddirection"
+    # Traffic parameters
+    TRAFFIC_VOLUME = "traffic_volume"
+    VEHICLE_SPEED = "vehicle_speed"
+    OCCUPANCY_RATE = "occupancy_rate"
+    # Transit proxy parameters
+    TRANSIT_RIDERSHIP = "transit_ridership"
 
 
 class MeasurementUnit(str, Enum):
@@ -33,6 +39,12 @@ class MeasurementUnit(str, Enum):
     HECTOPASCALS = "hpa"
     METERS_PER_SECOND = "m/s"
     DEGREES = "degrees"
+    # Traffic measurement units
+    VEHICLES_PER_HOUR = "vehicles/hour"
+    VEHICLES_PER_5MIN = "vehicles/5min"
+    KILOMETERS_PER_HOUR = "km/h"
+    PERCENT_OCCUPANCY = "%occupancy"
+    PASSENGERS_PER_HOUR = "passengers/hour"
 
 
 @dataclass(frozen=True)
