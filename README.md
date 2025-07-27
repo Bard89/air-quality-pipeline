@@ -1,11 +1,12 @@
-# Air Quality & Traffic Data Collection
+# Air Quality, Traffic & Weather Data Collection
 
-A minimal, efficient tool for downloading global air quality data from OpenAQ and traffic data from JARTIC (Japan). Downloads sensor-specific measurements with precise coordinates for machine learning applications.
+A comprehensive tool for downloading global air quality data from OpenAQ, traffic data from JARTIC (Japan), and weather data from multiple sources including JMA, ERA5, and NASA POWER. Downloads sensor-specific measurements with precise coordinates for machine learning applications.
 
 ## Features
 
 - **Global air quality data** from OpenAQ with 100+ parameters
 - **Japanese traffic data** from JARTIC (free, no API key required)
+- **Weather data** from JMA, ERA5, and NASA POWER with atmospheric layers
 - **Precise GPS coordinates** for each sensor location
 - **Automatic checkpoint/resume** for interrupted downloads
 - **Parallel downloads** with multiple API keys (air quality)
@@ -27,6 +28,11 @@ pip install -r requirements.txt
    
    **For JARTIC (traffic data):**
    - No API key required - JARTIC provides free public access
+   
+   **For Weather Data:**
+   - **NASA POWER**: No API key required - free public access
+   - **ERA5**: Register at https://cds.climate.copernicus.eu/ for CDS API key
+   - **JMA**: No API key required for AMeDAS data
    
    **Single API key:**
    ```
@@ -117,6 +123,31 @@ python convert_jartic_encoding.py --input-dir data/jartic/extracted/2024_02
 python convert_jartic_encoding.py --input-dir data/jartic/extracted/2024_02 --in-place
 ```
 
+### Download Weather Data (Japan)
+
+```bash
+# List available weather data sources
+python download_weather_data.py --list-sources
+
+# List available weather parameters
+python download_weather_data.py --list-parameters
+
+# Download from NASA POWER (no API key required - recommended for quick start)
+python download_weather_data.py --source nasapower --country JP
+
+# Download specific parameters
+python download_weather_data.py --source nasapower --parameters temperature,humidity,windspeed,precipitation
+
+# Download from JMA AMeDAS stations
+python download_weather_data.py --source jma --country JP --max-locations 50
+
+# Download from ERA5 (requires CDS API key - best resolution)
+python download_weather_data.py --source era5 --country JP --start 2024-01-01 --end 2024-01-31
+
+# Download with date range
+python download_weather_data.py --source nasapower --start 2024-01-01 --end 2024-12-31
+```
+
 ### Command Options
 
 **Air Quality (download_air_quality.py):**
@@ -151,6 +182,17 @@ python convert_jartic_encoding.py --input-dir data/jartic/extracted/2024_02 --in
   - `--output-dir, -o`: Output directory for UTF-8 files
   - `--in-place`: Convert files in place (with backups)
 
+**Weather Data (download_weather_data.py):**
+- `--source, -s`: Weather data source (jma, era5, nasapower)
+- `--country, -c`: Country code (default: JP)
+- `--parameters, -p`: Comma-separated weather parameters
+- `--start`: Start date (YYYY-MM-DD)
+- `--end`: End date (YYYY-MM-DD)
+- `--max-locations`: Limit number of locations
+- `--no-analyze`: Skip automatic analysis
+- `--list-sources`: Show available weather sources
+- `--list-parameters`: Show available parameters
+
 ### Available Parameters
 
 **Particulate Matter:**
@@ -180,6 +222,18 @@ python convert_jartic_encoding.py --input-dir data/jartic/extracted/2024_02 --in
 - `um025` - Particle count (2.5μm)
 - `um100` - Particle count (10μm)
 
+**Weather Parameters:**
+- `temperature` - Air temperature
+- `humidity` - Relative humidity
+- `pressure` - Atmospheric pressure
+- `windspeed` - Wind speed
+- `winddirection` - Wind direction
+- `precipitation` - Rainfall/snowfall
+- `solar_radiation` - Solar irradiance
+- `visibility` - Visibility distance
+- `cloud_cover` - Cloud coverage
+- `dew_point` - Dew point temperature
+
 ## Output
 
 **Air Quality Data:**
@@ -187,6 +241,9 @@ Data is saved to `data/openaq/processed/{country}_airquality_all_{timestamp}.csv
 
 **Traffic Data:**
 Data is saved to `data/jartic/processed/jp_traffic_{timestamp}.csv`
+
+**Weather Data:**
+Data is saved to `data/{source}/processed/jp_{source}_weather_{timestamp}.csv`
 
 **Note**: Due to OpenAQ API limitations, the tool now downloads ALL available data from sensors without date filtering. The API ignores date parameters and returns data starting from the oldest available measurements.
 
@@ -211,6 +268,19 @@ Data is saved to `data/jartic/processed/jp_traffic_{timestamp}.csv`
 - `parameter`: Traffic metric (e.g., vehicle_count, speed)
 - `value`: Measurement value
 - `unit`: Measurement unit
+
+**Weather Data:**
+- `timestamp`: UTC timestamp
+- `sensor_id`: Weather sensor/grid identifier
+- `location_id`: Location identifier
+- `location_name`: Human-readable location
+- `latitude`, `longitude`: Exact coordinates
+- `parameter`: Weather variable
+- `value`: Measurement value
+- `unit`: Measurement unit
+- `data_source`: Source system (jma/era5/nasapower)
+- `level`: Atmospheric level (surface, 850hPa, etc.)
+- `quality_flag`: Data quality indicator
 
 ### Convert to Wide Format
 
@@ -304,6 +374,17 @@ Recommended countries with extensive sensor networks:
 - Parameters: Vehicle counts, speeds, and traffic density
 - Archive size: ~4GB per month (compressed)
 - Update frequency: 5-minute intervals
+
+### Weather Data Sources
+- **NASA POWER**: Global coverage, 0.5° resolution, no API key required
+  - Best for: Quick start, validated satellite data
+  - Temporal: Hourly from 2001, daily from 1984
+- **ERA5**: 0.25° resolution, comprehensive parameters, requires CDS API key
+  - Best for: High-resolution atmospheric layers
+  - Coverage: 1940-present with 5-day latency
+- **JMA**: Japanese AMeDAS stations + JRA-55 reanalysis
+  - Best for: Japan-specific regional weather patterns
+  - Includes surface observations and atmospheric profiles
 
 ### JARTIC Data Format
 Downloaded traffic data includes:
@@ -432,6 +513,9 @@ When using `--parallel` with multiple API keys:
 
 - **OpenAQ**: Global air quality data from government monitoring stations
 - **JARTIC**: Japan Road Traffic Information Center - free historical traffic data for Japan
+- **NASA POWER**: Satellite-derived weather data with global coverage
+- **ERA5**: ECMWF reanalysis - highest resolution weather data
+- **JMA**: Japan Meteorological Agency - AMeDAS stations and JRA-55 reanalysis
 
 ## License
 

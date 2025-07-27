@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Weather data collection support for Japan
+- JMA (Japan Meteorological Agency) plugin for AMeDAS stations and JRA-55 reanalysis
+- ERA5 weather data plugin with 0.25° resolution and atmospheric layers
+- NASA POWER weather data plugin with free API access
+- Weather-specific parameter types and measurement units
+- download_weather_data.py CLI for weather data collection
+- Support for multi-level atmospheric data (surface to 100hPa)
+- Comprehensive weather parameters including temperature, humidity, wind, precipitation, solar radiation, visibility, cloud cover, and dew point
 - Architecture documentation with Mermaid diagrams
   - High-level component overview
   - Sequence diagrams for download flow

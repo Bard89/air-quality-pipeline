@@ -30,7 +30,10 @@ class PluginRegistry:
             'openaq',
             'purpleair',
             'waqi',
-            'jartic'
+            'jartic',
+            'jma',
+            'era5',
+            'nasapower'
         ]
         
         for module_name in plugin_modules:
