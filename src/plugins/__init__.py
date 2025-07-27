@@ -29,7 +29,8 @@ class PluginRegistry:
         plugin_modules = [
             'openaq',
             'purpleair',
-            'waqi'
+            'waqi',
+            'jartic'
         ]
         
         for module_name in plugin_modules:
