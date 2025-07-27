@@ -149,8 +149,10 @@ class JARTICArchiveDownloader:
                     unit='B',
                     unit_scale=True,
                     unit_divisor=1024,
-                    desc=f"   {year}-{month:02d}",
-                    bar_format='{desc}: {percentage:3.0f}%|{bar:30}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
+                    desc=f"📥 Download {year}-{month:02d}",
+                    position=4,
+                    leave=False,
+                    bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
                 )
 
                 mode = 'ab' if resume_pos > 0 else 'wb'

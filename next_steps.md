@@ -2,10 +2,87 @@
 
 **Created Date:** 2025-07-26  
 **Current Branch:** add-traffic-data  
-**Target Data Period:** 2023-2025 (to align with existing air quality data)
+**Target Data Period:** 2023-2025 (to align with existing air quality data)  
+**Last Updated:** 2025-07-27
 
 ## Overview
 This document outlines the plan to integrate free traffic data sources for Japan (2023-2025) into the existing air quality data collection system.
+
+## Implementation Status
+
+### ✅ COMPLETED
+- **Phase 1: Domain Model Extensions** - DONE
+  - Added `TRAFFIC_VOLUME` and `VEHICLE_SPEED` to ParameterType enum
+  - Added traffic-related measurement units
+  
+- **Phase 2: JARTIC Archive Plugin** - DONE
+  - Created plugin structure in `src/plugins/jartic/`
+  - Implemented `datasource.py` with DataSource interface
+  - Implemented `archive_downloader.py` for downloading from compusophia.com
+  - Implemented `data_parser.py` for parsing JARTIC CSV formats
+  - Plugin registered in plugin system and accessible via CLI
+
+### 🚧 IN PROGRESS
+- **Phase 3: Data Integration Strategy**
+  - Location matching between air quality and traffic stations
+  - Combined data download capabilities
+  - CSV output format for combined air quality + traffic data
+
+### 📋 TODO
+- **Phase 4: Full Integration**
+  - Update checkpoint system for archive-based downloads
+  - Create dedicated `download_traffic.py` script
+  - Implement location mapping logic
+  - Add combined data analysis capabilities
+- **Phase 5: Additional Plugins**
+  - JARTIC API plugin for recent data
+  - ODPT transit data plugin
+
+## Next Immediate Steps
+
+1. **Complete Location Mapping** (Priority 1)
+   - Implement proper coordinate extraction from JARTIC data
+   - Create mapping between JARTIC station IDs and geographic coordinates
+   - Store location data in a reusable format
+
+2. **Enhance Checkpoint System** (Priority 2)
+   - Add support for tracking downloaded archive files
+   - Implement resume capability for partial archive downloads
+   - Integrate with existing checkpoint infrastructure
+
+3. **Create Combined Output** (Priority 3)
+   - Design CSV schema that includes both air quality and traffic data
+   - Implement location matching algorithm (find nearest traffic station to each air quality station)
+   - Create combined data download workflow
+
+4. **Build Dedicated Traffic CLI** (Priority 4)
+   - Create `download_traffic.py` with traffic-specific options
+   - Add support for different time aggregations (5-min vs hourly)
+   - Implement batch download for date ranges
+
+## Test Commands Available Now
+
+The JARTIC plugin is integrated into the main CLI and can be tested with:
+
+```bash
+# Test JARTIC plugin functionality
+pytest tests/test_jartic_plugin.py -v
+
+# Download JARTIC archive data (uses existing CLI with --source jartic)
+python download_air_quality.py --source jartic --country JP --start-date 2024-01-01 --end-date 2024-01-31
+
+# View available locations from JARTIC
+python download_air_quality.py --source jartic --country JP --list-locations
+
+# Download specific JARTIC location data
+python download_air_quality.py --source jartic --location "Tokyo-Shibuya" --start-date 2024-01-01
+```
+
+Note: The JARTIC plugin currently downloads archive files from compusophia.com and extracts traffic data. However, the following features still need implementation:
+- Checkpoint support for resuming large archive downloads
+- Location coordinate mapping (currently returns placeholder coordinates)
+- Integration with air quality data for combined analysis
+- CSV output formatting for traffic-specific parameters
 
 ## Available Free Traffic Data Sources
 
@@ -30,45 +107,35 @@ This document outlines the plan to integrate free traffic data sources for Japan
 
 ## Implementation Plan
 
-### Phase 1: Domain Model Extensions
+### ✅ Phase 1: Domain Model Extensions (COMPLETED)
 
-1. **Extend ParameterType enum** in `src/domain/models.py`:
-   ```python
-   # Traffic parameters
-   TRAFFIC_VOLUME = "traffic_volume"
-   VEHICLE_SPEED = "vehicle_speed"
-   OCCUPANCY_RATE = "occupancy_rate"
-   # Transit proxy parameters
-   TRANSIT_RIDERSHIP = "transit_ridership"
-   ```
+1. **Extended ParameterType enum** in `src/domain/models.py`:
+   - ✅ Added `TRAFFIC_VOLUME = "traffic_volume"`
+   - ✅ Added `VEHICLE_SPEED = "vehicle_speed"`
+   - TODO: `OCCUPANCY_RATE = "occupancy_rate"`
+   - TODO: `TRANSIT_RIDERSHIP = "transit_ridership"`
 
-2. **Extend MeasurementUnit enum**:
-   ```python
-   VEHICLES_PER_HOUR = "vehicles/hour"
-   VEHICLES_PER_5MIN = "vehicles/5min"
-   KILOMETERS_PER_HOUR = "km/h"
-   PERCENT_OCCUPANCY = "%occupancy"
-   PASSENGERS_PER_HOUR = "passengers/hour"
-   ```
+2. **Extended MeasurementUnit enum**:
+   - ✅ Added traffic-related units
+   - TODO: Verify all units are properly mapped
 
-### Phase 2: Create Traffic Data Plugins
+### ✅ Phase 2: Create Traffic Data Plugins (JARTIC COMPLETED)
 
-1. **JARTIC Archive Plugin** (`src/plugins/jartic/`):
-   - `archive_datasource.py`: Implements DataSource interface
-   - `archive_downloader.py`: Downloads and extracts monthly archives
-   - `data_parser.py`: Parses JARTIC CSV/JSON formats
-   - Features:
-     - Download historical archives from compusophia.com
-     - Parse traffic volume data (5-min/hourly)
-     - Map JARTIC locations to coordinates
-     - Handle missing data gracefully
+1. **JARTIC Archive Plugin** (`src/plugins/jartic/`) - ✅ COMPLETED:
+   - ✅ `datasource.py`: Implements DataSource interface
+   - ✅ `archive_downloader.py`: Downloads and extracts monthly archives
+   - ✅ `data_parser.py`: Parses JARTIC CSV formats
+   - ✅ Downloads historical archives from compusophia.com
+   - ✅ Parses traffic volume data (5-min/hourly)
+   - 🚧 TODO: Proper location coordinate mapping
+   - ✅ Handles missing data gracefully
 
-2. **JARTIC API Plugin** (`src/plugins/jartic_api/`):
+2. **JARTIC API Plugin** (`src/plugins/jartic_api/`) - TODO:
    - `api_datasource.py`: Implements DataSource interface
    - Uses existing API client pattern
    - For recent data (last 3 months)
 
-3. **ODPT Transit Plugin** (`src/plugins/odpt/`):
+3. **ODPT Transit Plugin** (`src/plugins/odpt/`) - TODO:
    - `transit_datasource.py`: Implements DataSource interface
    - `gtfs_parser.py`: Parse GTFS format data
    - Maps transit stations to nearby traffic monitoring points
@@ -90,47 +157,62 @@ This document outlines the plan to integrate free traffic data sources for Japan
    - Separate traffic data files with location cross-references
    - Update checkpoint system for traffic downloads
 
-### Phase 4: Implementation Steps
+### Phase 4: Implementation Steps (UPDATED TIMELINE)
 
-1. **Setup & Configuration** (Week 1):
-   - Register for JARTIC API access
-   - Register for ODPT developer account
-   - Create configuration files for each data source
-   - Document API keys in `.env.example`
+1. **✅ Setup & Configuration** (COMPLETED):
+   - ✅ JARTIC archive access configured (no API key needed)
+   - TODO: Register for JARTIC API access
+   - TODO: Register for ODPT developer account
+   - ✅ Configuration structure in place
+   - TODO: Document additional API keys in `.env.example`
 
-2. **Core Extensions** (Week 1):
-   - Extend domain models
-   - Create base traffic plugin structure
-   - Add traffic-specific error handling
+2. **✅ Core Extensions** (COMPLETED):
+   - ✅ Extended domain models
+   - ✅ Created JARTIC traffic plugin structure
+   - ✅ Added traffic-specific error handling
 
-3. **JARTIC Archive Plugin** (Week 2):
-   - Implement archive downloader
-   - Create data parser for JARTIC formats
-   - Build location mapping logic
-   - Test with 2023-2024 data
+3. **✅ JARTIC Archive Plugin** (COMPLETED):
+   - ✅ Implemented archive downloader
+   - ✅ Created data parser for JARTIC CSV formats
+   - 🚧 TODO: Complete location coordinate mapping
+   - ✅ Basic testing complete
 
-4. **JARTIC API Plugin** (Week 3):
+4. **🚧 Data Integration** (CURRENT FOCUS - Week 1-2):
+   - Implement proper location coordinate mapping
+   - Update checkpoint system for archive downloads
+   - Create combined CSV output format
+   - Build location matching between air quality and traffic stations
+
+5. **📋 JARTIC API Plugin** (Week 2):
    - Implement API client
    - Add rate limiting (if needed)
    - Test real-time data collection
 
-5. **ODPT Plugin** (Week 3-4):
+6. **📋 ODPT Plugin** (Week 3):
    - Implement GTFS parser
    - Create transit-traffic correlation logic
    - Test proxy data accuracy
 
-6. **Integration & Testing** (Week 4):
-   - Update CLI to support traffic data sources
+7. **📋 Full Integration & Testing** (Week 3-4):
+   - Create dedicated `download_traffic.py` script
    - Create combined air quality + traffic reports
    - Performance testing with parallel downloads
    - Documentation updates
 
 ### Phase 5: CLI Commands
 
-New commands to add:
-
+**Currently Available** (via existing CLI):
 ```bash
-# Download historical JARTIC archives
+# Download JARTIC archive data
+python download_air_quality.py --source jartic --country JP --start-date 2024-01-01 --end-date 2024-01-31
+
+# List JARTIC locations
+python download_air_quality.py --source jartic --country JP --list-locations
+```
+
+**To Be Implemented**:
+```bash
+# Dedicated traffic download script
 python download_traffic.py --source jartic-archive --country JP --year 2023
 
 # Download recent JARTIC data via API
@@ -140,7 +222,7 @@ python download_traffic.py --source jartic-api --country JP --days 90
 python download_traffic.py --source odpt --country JP --start-date 2023-01-01
 
 # Combined download (air quality + traffic)
-python download_all_data.py --country JP --include-traffic
+python download_all_data.py --country JP --include-traffic --start-date 2023-01-01
 ```
 
 ## Technical Considerations
