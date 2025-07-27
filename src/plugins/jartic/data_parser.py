@@ -1,4 +1,5 @@
 import csv
+import io
 import json
 import logging
 import re
@@ -44,30 +45,65 @@ class JARTICDataParser:
         location_map = {}
 
         try:
-            with zipfile.ZipFile(archive_path, 'r') as zf:
-                file_list = zf.namelist()
+            with zipfile.ZipFile(archive_path, 'r') as main_zf:
+                # JARTIC archives contain prefecture-level ZIP files
+                prefecture_zips = [f for f in main_zf.namelist() if f.endswith('.zip')]
+                logger.info(f"Found {len(prefecture_zips)} prefecture archives")
 
-                location_files = self._find_location_files(file_list)
-
-                for file_name in location_files:
+                for pref_zip_name in prefecture_zips[:5]:  # Process first 5 prefectures
                     try:
-                        with zf.open(file_name) as f:
-                            content = f.read().decode('utf-8', errors='ignore')
-
-                            if file_name.endswith('.json'):
-                                locations.extend(
-                                    self._parse_json_locations(content, file_name)
-                                )
-                            elif file_name.endswith('.csv'):
-                                locations.extend(
-                                    self._parse_csv_locations(content, file_name)
-                                )
-
+                        # Extract prefecture name from filename
+                        # Format: typeB_aichi_2024_01.zip
+                        parts = pref_zip_name.split('_')
+                        if len(parts) >= 2:
+                            prefecture = parts[1]
+                        else:
+                            prefecture = "unknown"
+                        
+                        logger.debug(f"Processing prefecture: {prefecture}")
+                        
+                        # Read the nested ZIP file
+                        with main_zf.open(pref_zip_name) as pref_file:
+                            pref_data = pref_file.read()
+                            
+                        # Parse the prefecture ZIP
+                        with zipfile.ZipFile(io.BytesIO(pref_data)) as pref_zf:
+                            file_list = pref_zf.namelist()
+                            
+                            location_files = self._find_location_files(file_list)
+                            
+                            if location_files:
+                                for file_name in location_files:
+                                    try:
+                                        with pref_zf.open(file_name) as f:
+                                            content = f.read().decode('utf-8', errors='ignore')
+                                            
+                                            if file_name.endswith('.json'):
+                                                locs = self._parse_json_locations(content, file_name)
+                                                for loc in locs:
+                                                    loc.metadata['prefecture'] = prefecture
+                                                locations.extend(locs)
+                                            elif file_name.endswith('.csv'):
+                                                locs = self._parse_csv_locations(content, file_name)
+                                                for loc in locs:
+                                                    loc.metadata['prefecture'] = prefecture
+                                                locations.extend(locs)
+                                    except Exception as e:
+                                        logger.warning(f"Failed to parse location file {file_name}: {e}")
+                            else:
+                                # Generate locations from data files in this prefecture
+                                locs = self._generate_locations_from_data_files(file_list)
+                                for loc in locs:
+                                    loc.metadata['prefecture'] = prefecture
+                                locations.extend(locs)
+                                
                     except Exception as e:
-                        logger.warning(f"Failed to parse location file {file_name}: {e}")
+                        logger.warning(f"Failed to process prefecture archive {pref_zip_name}: {e}")
+                        continue
 
                 if not locations:
-                    locations = self._generate_locations_from_data_files(file_list)
+                    # Fallback: generate generic locations
+                    locations = self._generate_locations_from_data_files(prefecture_zips)
 
         except Exception as e:
             logger.error(f"Failed to parse locations from archive: {e}")
@@ -91,31 +127,76 @@ class JARTICDataParser:
         end_date: datetime
     ) -> AsyncIterator[Measurement]:
         try:
-            with zipfile.ZipFile(archive_path, 'r') as zf:
-                file_list = zf.namelist()
-
-                relevant_files = self._find_measurement_files(
-                    file_list,
-                    sensor.location.id,
-                    sensor.parameter
-                )
-
-                for file_name in relevant_files:
+            with zipfile.ZipFile(archive_path, 'r') as main_zf:
+                # Get prefecture from sensor location metadata
+                prefecture = sensor.location.metadata.get('prefecture', '')
+                
+                # Find the matching prefecture ZIP
+                prefecture_zips = [f for f in main_zf.namelist() if f.endswith('.zip')]
+                target_zip = None
+                
+                for pref_zip in prefecture_zips:
+                    if prefecture and prefecture in pref_zip.lower():
+                        target_zip = pref_zip
+                        break
+                
+                if not target_zip and prefecture_zips:
+                    # If no match, process all prefectures
+                    logger.warning(f"Prefecture '{prefecture}' not found, processing all archives")
+                    target_zips = prefecture_zips
+                else:
+                    target_zips = [target_zip] if target_zip else []
+                
+                for pref_zip_name in target_zips:
                     try:
-                        with zf.open(file_name) as f:
-                            content = f.read().decode('utf-8', errors='ignore')
-
-                            async for measurement in self._parse_measurement_file(
-                                content,
-                                file_name,
-                                sensor,
-                                start_date,
-                                end_date
-                            ):
-                                yield measurement
-
+                        # Read the nested ZIP file
+                        with main_zf.open(pref_zip_name) as pref_file:
+                            pref_data = pref_file.read()
+                        
+                        # Parse the prefecture ZIP
+                        with zipfile.ZipFile(io.BytesIO(pref_data)) as pref_zf:
+                            file_list = pref_zf.namelist()
+                            
+                            relevant_files = self._find_measurement_files(
+                                file_list,
+                                sensor.location.id,
+                                sensor.parameter
+                            )
+                            
+                            logger.info(f"Prefecture {pref_zip_name} has {len(file_list)} files, {len(relevant_files)} relevant for sensor {sensor.id}")
+                            
+                            # Log some sample filenames to understand structure
+                            if file_list and len(relevant_files) == 0:
+                                logger.debug(f"Sample files in {pref_zip_name}: {file_list[:5]}")
+                            
+                            for file_name in relevant_files:
+                                try:
+                                    with pref_zf.open(file_name) as f:
+                                        content_bytes = f.read()
+                                        # JARTIC CSV files are in Shift-JIS encoding
+                                        try:
+                                            content = content_bytes.decode('shift_jis')
+                                        except:
+                                            try:
+                                                content = content_bytes.decode('cp932')
+                                            except:
+                                                content = content_bytes.decode('utf-8', errors='ignore')
+                                        
+                                        async for measurement in self._parse_measurement_file(
+                                            content,
+                                            file_name,
+                                            sensor,
+                                            start_date,
+                                            end_date
+                                        ):
+                                            yield measurement
+                                            
+                                except Exception as e:
+                                    logger.warning(f"Failed to parse measurement file {file_name}: {e}")
+                                    
                     except Exception as e:
-                        logger.warning(f"Failed to parse measurement file {file_name}: {e}")
+                        logger.warning(f"Failed to process prefecture archive {pref_zip_name}: {e}")
+                        continue
 
         except Exception as e:
             logger.error(f"Failed to parse measurements from archive: {e}")
@@ -144,30 +225,10 @@ class JARTICDataParser:
         location_id: str,
         parameter: ParameterType
     ) -> List[str]:
-        relevant_files = []
-
-        if parameter == ParameterType.TRAFFIC_VOLUME:
-            patterns = ['volume', 'cross_section', 'hourly', '5min']
-        elif parameter == ParameterType.VEHICLE_SPEED:
-            patterns = ['speed']
-        elif parameter == ParameterType.OCCUPANCY_RATE:
-            patterns = ['occupancy']
-        else:
-            return []
-
-        for file_name in file_list:
-            if location_id in file_name:
-                relevant_files.append(file_name)
-                continue
-
-            for pattern_key in patterns:
-                if pattern_key in self.traffic_data_patterns:
-                    pattern = self.traffic_data_patterns[pattern_key]
-                    if pattern.search(file_name):
-                        relevant_files.append(file_name)
-                        break
-
-        return relevant_files
+        # JARTIC archives have one CSV file per prefecture
+        # All traffic data types are in the same file
+        csv_files = [f for f in file_list if f.endswith('.csv')]
+        return csv_files
 
     def _parse_json_locations(self, content: str, file_name: str) -> List[Location]:
         locations = []
@@ -381,14 +442,75 @@ class JARTICDataParser:
         end_date: datetime
     ) -> AsyncIterator[Measurement]:
         try:
-            reader = csv.DictReader(StringIO(content))
-
-            for row in reader:
-                measurement = self._create_measurement_from_csv(
-                    row, sensor, start_date, end_date
-                )
-                if measurement:
-                    yield measurement
+            # Content should already be decoded properly
+            if isinstance(content, bytes):
+                logger.warning("CSV content is still bytes, should be decoded")
+                return
+                
+            lines = content.split('\n')
+            
+            # Parse header
+            if not lines[0]:
+                return
+                
+            headers = lines[0].strip().split(',')
+            
+            # Map Japanese headers to indices
+            header_map = {
+                '時刻': 0,  # Time
+                '情報源コード': 1,  # Source code
+                '計測地点番号': 2,  # Measurement point number
+                '計測地点名称': 3,  # Measurement point name
+                '断面交通量': 7,  # Cross-section traffic volume
+            }
+            
+            # Process data lines
+            for line in lines[1:]:
+                if not line.strip():
+                    continue
+                    
+                cols = line.strip().split(',')
+                if len(cols) < 10:
+                    continue
+                
+                try:
+                    # Extract relevant fields
+                    time_str = cols[0]  # YYYY/MM/DD HH:MM
+                    point_number = cols[2]  # Measurement point number
+                    point_name = cols[3]  # Measurement point name
+                    traffic_volume = cols[7]  # Traffic volume
+                    
+                    # Parse timestamp
+                    timestamp = self._parse_timestamp(time_str)
+                    if not timestamp:
+                        continue
+                    
+                    # Check date range
+                    if not (start_date <= timestamp <= end_date):
+                        continue
+                    
+                    # Check if this measurement matches the sensor location
+                    # For now, we'll match any data since we don't have exact mapping
+                    if sensor.parameter == ParameterType.TRAFFIC_VOLUME:
+                        try:
+                            value = float(traffic_volume)
+                            
+                            yield Measurement(
+                                sensor=sensor,
+                                timestamp=timestamp,
+                                value=Decimal(str(value)),
+                                metadata={
+                                    'source': 'JARTIC',
+                                    'point_number': point_number,
+                                    'point_name': point_name
+                                }
+                            )
+                        except ValueError:
+                            continue
+                            
+                except Exception as e:
+                    logger.debug(f"Failed to parse CSV line: {e}")
+                    continue
 
         except Exception as e:
             logger.warning(f"Failed to parse CSV measurements: {e}")
@@ -487,6 +609,7 @@ class JARTICDataParser:
             return None
 
         timestamp_formats = [
+            '%Y/%m/%d %H:%M',  # JARTIC format
             '%Y-%m-%d %H:%M:%S',
             '%Y/%m/%d %H:%M:%S',
             '%Y-%m-%dT%H:%M:%S',
@@ -500,10 +623,9 @@ class JARTICDataParser:
             try:
                 dt = datetime.strptime(timestamp_str.strip(), fmt)
 
-                if '+09:00' in timestamp_str or fmt.endswith('時%M分'):
+                # JARTIC timestamps are in JST (UTC+9)
+                if not dt.tzinfo:
                     dt = dt.replace(tzinfo=timezone(timedelta(hours=9)))
-                elif not dt.tzinfo:
-                    dt = dt.replace(tzinfo=timezone.utc)
 
                 return dt
             except ValueError:
