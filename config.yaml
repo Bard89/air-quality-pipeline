@@ -56,3 +56,12 @@ data_sources:
       base_url: https://api.waqi.info
       rate_limit_per_key: 1000
       timeout: 30
+
+  - name: jartic
+    type: jartic
+    enabled: false
+    config:
+      base_url: https://www.compusophia.com/jartic_data
+      timeout: 300
+      cache_dir: data/jartic/cache
+      cleanup_after_parse: true

@@ -105,7 +105,7 @@ async def main():
         print(f"Error: Data source '{args.source}' not configured or disabled")
         sys.exit(1)
     
-    if not source_config.api_keys:
+    if not source_config.api_keys and args.source != 'jartic':
         print(f"Error: No API keys configured for '{args.source}'")
         sys.exit(1)
     

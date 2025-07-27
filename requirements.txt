@@ -2,3 +2,5 @@ requests==2.31.0
 python-dotenv==1.0.0
 pandas==2.2.3
 aiohttp==3.9.5
+beautifulsoup4==4.12.3
+tqdm==4.66.4

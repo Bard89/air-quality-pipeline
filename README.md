@@ -1,6 +1,16 @@
-# Air Quality Data Collection
+# Air Quality & Traffic Data Collection
 
-A minimal, efficient tool for downloading global air quality data from OpenAQ. Downloads sensor-specific measurements with precise coordinates for machine learning applications.
+A minimal, efficient tool for downloading global air quality data from OpenAQ and traffic data from JARTIC (Japan). Downloads sensor-specific measurements with precise coordinates for machine learning applications.
+
+## Features
+
+- **Global air quality data** from OpenAQ with 100+ parameters
+- **Japanese traffic data** from JARTIC (free, no API key required)
+- **Precise GPS coordinates** for each sensor location
+- **Automatic checkpoint/resume** for interrupted downloads
+- **Parallel downloads** with multiple API keys (air quality)
+- **Wide format conversion** for ML-ready datasets
+- **Built-in data analysis** with statistics and visualizations
 
 ## Setup
 
@@ -9,10 +19,14 @@ A minimal, efficient tool for downloading global air quality data from OpenAQ. D
 pip install -r requirements.txt
 ```
 
-2. Get your OpenAQ API key(s):
+2. Configure API keys:
+   **For OpenAQ (air quality data):**
    - Sign up at https://explore.openaq.org/register
    - Create `.env` file: `cp .env.example .env`
    - Add your API key(s) to `.env`
+   
+   **For JARTIC (traffic data):**
+   - No API key required - JARTIC provides free public access
    
    **Single API key:**
    ```
@@ -62,8 +76,50 @@ python download_air_quality.py --country IN --parameters pm25 --country-wide --m
 python download_air_quality.py --country IN --country-wide --max-locations 10 --parallel
 ```
 
+### Download Traffic Data (Japan Only)
+
+#### Step 1: Download Archives
+```bash
+# Download JARTIC archives for specific months
+python download_jartic_archives.py --start 2024-01 --end 2024-12
+
+# Download with custom cache directory
+python download_jartic_archives.py --start 2024-01 --end 2024-03 --cache-dir /custom/path
+```
+
+#### Step 2: Extract CSV Files
+```bash
+# Extract a specific month (converts to UTF-8 by default)
+python extract_jartic_csvs.py --archive data/jartic/cache/jartic_typeB_2024_02.zip
+
+# Extract all downloaded archives
+python extract_jartic_csvs.py --all
+
+# Keep original Shift-JIS encoding
+python extract_jartic_csvs.py --archive data/jartic/cache/jartic_typeB_2024_02.zip --no-convert
+```
+
+#### Step 3: Process Extracted Data
+```bash
+# Process specific date range
+python process_extracted_csvs.py --start 2024-02-01 --end 2024-02-28
+
+# Process specific month directory
+python process_extracted_csvs.py --start 2024-02-01 --end 2024-02-28 --month 2024_02
+```
+
+#### Optional: Convert Encoding
+```bash
+# Convert existing Shift-JIS files to UTF-8
+python convert_jartic_encoding.py --input-dir data/jartic/extracted/2024_02
+
+# Convert in-place with backups
+python convert_jartic_encoding.py --input-dir data/jartic/extracted/2024_02 --in-place
+```
+
 ### Command Options
 
+**Air Quality (download_air_quality.py):**
 - `--country, -c`: Country code (e.g., US, IN, JP, TH)
 - `--parameters, -p`: Comma-separated parameters (see available parameters below)
 - `--country-wide`: Download ALL available data from a country (no date filtering)
@@ -71,6 +127,29 @@ python download_air_quality.py --country IN --country-wide --max-locations 10 --
 - `--analyze, -a`: Auto-analyze after download (default: true)
 - `--list-countries`: List all available countries
 - `--parallel`: Enable parallel mode for faster downloads (requires multiple API keys)
+
+**JARTIC Archive Download (download_jartic_archives.py):**
+- `--start, -s`: Start month (YYYY-MM)
+- `--end, -e`: End month (YYYY-MM)
+- `--cache-dir`: Cache directory for archives (default: data/jartic/cache)
+
+**JARTIC Processing Scripts:**
+- `extract_jartic_csvs.py`: Extract CSV files from archives
+  - `--archive, -a`: Specific archive to extract
+  - `--all`: Extract all archives in cache directory
+  - `--output-dir, -o`: Output directory (default: data/jartic/extracted)
+  - `--no-convert`: Keep Shift-JIS encoding (default: convert to UTF-8)
+  
+- `process_extracted_csvs.py`: Process extracted CSV files
+  - `--start, -s`: Start date (YYYY-MM-DD)
+  - `--end, -e`: End date (YYYY-MM-DD)
+  - `--input-dir, -i`: Directory with extracted CSVs
+  - `--month, -m`: Specific month directory (e.g., 2024_02)
+  
+- `convert_jartic_encoding.py`: Convert file encoding
+  - `--input-dir, -i`: Directory with Shift-JIS files
+  - `--output-dir, -o`: Output directory for UTF-8 files
+  - `--in-place`: Convert files in place (with backups)
 
 ### Available Parameters
 
@@ -103,11 +182,17 @@ python download_air_quality.py --country IN --country-wide --max-locations 10 --
 
 ## Output
 
+**Air Quality Data:**
 Data is saved to `data/openaq/processed/{country}_airquality_all_{timestamp}.csv`
+
+**Traffic Data:**
+Data is saved to `data/jartic/processed/jp_traffic_{timestamp}.csv`
 
 **Note**: Due to OpenAQ API limitations, the tool now downloads ALL available data from sensors without date filtering. The API ignores date parameters and returns data starting from the oldest available measurements.
 
 ### CSV Format (Long Format)
+
+**Air Quality Data:**
 - `datetime`: UTC timestamp
 - `value`: Measurement value
 - `sensor_id`: Unique sensor identifier
@@ -117,6 +202,15 @@ Data is saved to `data/openaq/processed/{country}_airquality_all_{timestamp}.csv
 - `parameter`: Pollutant type
 - `unit`: Measurement unit
 - `city`, `country`: Geographic info
+
+**Traffic Data:**
+- `timestamp`: UTC timestamp
+- `location_id`: Traffic sensor identifier
+- `location_name`: Human-readable location
+- `latitude`, `longitude`: Sensor coordinates
+- `parameter`: Traffic metric (e.g., vehicle_count, speed)
+- `value`: Measurement value
+- `unit`: Measurement unit
 
 ### Convert to Wide Format
 
@@ -144,7 +238,8 @@ Each download includes:
 ## Project Structure
 
 ```
-├── download_air_quality.py   # Main CLI tool
+├── download_air_quality.py   # Air quality data CLI
+├── download_traffic_data.py  # Traffic data CLI (Japan)
 ├── transform_to_wide.py      # Convert to wide format
 ├── view_checkpoints.py       # View download history
 ├── src/
@@ -160,6 +255,10 @@ Each download includes:
 │   │   ├── data_downloader.py
 │   │   ├── incremental_downloader_all.py  # Downloads all sensor data
 │   │   └── incremental_downloader_parallel.py  # Parallel downloader with location batching
+│   ├── plugins/jartic/      # JARTIC traffic data plugin
+│   │   ├── datasource.py    # JARTIC data source implementation
+│   │   ├── archive_downloader.py  # Historical archive handler
+│   │   └── data_parser.py   # Parse JARTIC CSV formats
 │   └── utils/
 │       ├── data_analyzer.py # Data analysis
 │       └── csv_to_wide_format.py  # Wide format conversion
@@ -197,6 +296,25 @@ Recommended countries with extensive sensor networks:
 - **Asia**: IN (India), CN (China), TH (Thailand), JP (Japan), KR (South Korea)
 - **Europe**: DE (Germany), GB (United Kingdom), PL (Poland)
 - **Americas**: US (United States), MX (Mexico), CL (Chile)
+
+### Traffic Data Availability
+- **Japan**: Historical traffic data available through JARTIC (free, no API key required)
+- Coverage: ~2,600 traffic monitoring locations across Japan
+- Data retention: Historical archives available for download
+- Parameters: Vehicle counts, speeds, and traffic density
+- Archive size: ~4GB per month (compressed)
+- Update frequency: 5-minute intervals
+
+### JARTIC Data Format
+Downloaded traffic data includes:
+- `timestamp`: ISO 8601 format with 5-minute intervals
+- `location_id`: JARTIC sensor ID (e.g., JARTIC_21001)
+- `location_name`: Japanese road name
+- `parameter`: traffic_volume (vehicles/5min)
+- `prefecture`: Prefecture name from archive
+- Note: Coordinates are placeholder (0,0) - actual mapping in development
+
+**Encoding Note**: JARTIC CSV files use Shift-JIS encoding. The extraction script automatically converts to UTF-8 for easier processing. Use `--no-convert` to keep original encoding.
 
 ## Performance
 
@@ -309,6 +427,11 @@ When using `--parallel` with multiple API keys:
 - 5 keys: 5x faster (300 req/min, 0.2s delay)
 - 10 keys: 10x faster (600 req/min, 0.1s delay)
 - 100 keys: 100x faster (6,000 req/min, 0.01s delay)
+
+## Data Sources
+
+- **OpenAQ**: Global air quality data from government monitoring stations
+- **JARTIC**: Japan Road Traffic Information Center - free historical traffic data for Japan
 
 ## License
 
