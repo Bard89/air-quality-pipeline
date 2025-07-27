@@ -98,9 +98,10 @@ async def process_archives_parallel(archives: list, start_date: datetime, end_da
     print(f"   Found {len(locations)} locations")
     print()
     
-    # Prepare output file
+    # Prepare output file - include date range in filename
+    date_range = f"{start_date.strftime('%Y%m')}-{end_date.strftime('%Y%m')}"
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    filename = f"jp_traffic_{timestamp}.csv"
+    filename = f"jp_traffic_{date_range}_{timestamp}.csv"
     output_path = storage.get_processed_dir('jartic') / filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
     

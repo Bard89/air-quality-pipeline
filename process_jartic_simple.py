@@ -41,10 +41,11 @@ def main():
     print(f"Archives found: {len(archives)}")
     print(f"Date range: {args.start} to {args.end}")
     
-    # Prepare output
+    # Prepare output - include date range in filename
     storage = DataStorage()
+    date_range = f"{start_date.strftime('%Y%m')}-{end_date.strftime('%Y%m')}"
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_path = storage.get_processed_dir('jartic') / f"jp_traffic_all_{timestamp}.csv"
+    output_path = storage.get_processed_dir('jartic') / f"jp_traffic_{date_range}_{timestamp}.csv"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     # Write header
