@@ -16,8 +16,17 @@ def convert_csv_encoding(input_path: Path, output_path: Path):
             f.write(content)
         
         return True
-    except Exception as e:
-        print(f"❌ Error converting {input_path.name}: {e}")
+    except FileNotFoundError:
+        print(f"❌ Error converting {input_path.name}: File not found")
+        return False
+    except UnicodeDecodeError:
+        print(f"❌ Error converting {input_path.name}: Invalid Shift-JIS encoding")
+        return False
+    except UnicodeEncodeError:
+        print(f"❌ Error converting {input_path.name}: Cannot encode to UTF-8")
+        return False
+    except IOError as e:
+        print(f"❌ Error converting {input_path.name}: I/O error - {e}")
         return False
 
 
@@ -73,12 +82,16 @@ def main():
             
             # Convert in place
             temp_path = csv_file.with_suffix('.tmp')
-            if convert_csv_encoding(csv_file, temp_path):
-                temp_path.replace(csv_file)
-                converted += 1
-            else:
-                temp_path.unlink(missing_ok=True)
-                failed += 1
+            try:
+                if convert_csv_encoding(csv_file, temp_path):
+                    temp_path.replace(csv_file)
+                    converted += 1
+                else:
+                    failed += 1
+            finally:
+                # Always clean up temp file if it exists
+                if temp_path.exists():
+                    temp_path.unlink()
         else:
             # Convert to new directory
             relative_path = csv_file.relative_to(args.input_dir)
@@ -97,7 +110,7 @@ def main():
         print(f"Failed: {failed}")
     
     # Show sample of converted content
-    if converted > 0:
+    if converted > 0 and csv_files:
         print("\n📋 Sample of converted content:")
         sample_file = csv_files[0] if args.in_place else output_dir / csv_files[0].relative_to(args.input_dir)
         if sample_file.exists():
