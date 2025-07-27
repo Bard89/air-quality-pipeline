@@ -29,11 +29,11 @@ class ParallelJARTICDownloader:
         
     async def download_worker(self, progress_bars):
         """Worker that downloads archives"""
-        while self.download_queue:
-            try:
+        while True:
+            with self.lock:
+                if not self.download_queue:
+                    break
                 archive_info = self.download_queue.popleft()
-            except IndexError:
-                break
                 
             month_str = f"{archive_info['year']}-{archive_info['month']:02d}"
             
@@ -57,7 +57,7 @@ class ParallelJARTICDownloader:
                         'archive_info': archive_info,
                         'archive_path': archive_path
                     })
-                    progress_bars['download'].update(1)
+                progress_bars['download'].update(1)
                     
             except Exception as e:
                 progress_bars['status'].write(f"❌ Failed to download {month_str}: {e}")
