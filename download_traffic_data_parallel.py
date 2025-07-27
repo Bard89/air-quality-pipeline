@@ -41,10 +41,16 @@ class ParallelJARTICDownloader:
             progress_bars['download'].set_description(f"📥 Downloading {month_str}")
             
             try:
-                archive_path = await self.datasource.downloader.download_archive(
-                    archive_info['year'],
-                    archive_info['month']
-                )
+                # Check if already downloaded
+                existing_path = self.datasource.cache_dir / f"jartic_typeB_{archive_info['year']}_{archive_info['month']:02d}.zip"
+                if existing_path.exists():
+                    progress_bars['status'].write(f"✓ Using cached {month_str}")
+                    archive_path = existing_path
+                else:
+                    archive_path = await self.datasource.downloader.download_archive(
+                        archive_info['year'],
+                        archive_info['month']
+                    )
                 
                 with self.lock:
                     self.processing_queue.append({
