@@ -10,10 +10,10 @@ import json
 from ...domain.interfaces import DataSource
 from ...domain.models import Location, Sensor, Measurement, Coordinates, ParameterType, MeasurementUnit
 from ...domain.exceptions import DataSourceError, APIError
-from ...infrastructure.retry import RetryPolicy, execute_with_retry
+# from ...infrastructure.retry import RetryPolicy, execute_with_retry
 from ...infrastructure.cache import Cache
 from ...infrastructure.metrics import MetricsCollector
-from ...core.api_client import APIClient
+from ...core.api_client import RateLimitedAPIClient
 
 
 logger = logging.getLogger(__name__)
@@ -22,17 +22,17 @@ logger = logging.getLogger(__name__)
 class NASAPowerDataSource(DataSource):
     def __init__(
         self,
-        api_client: Optional[APIClient] = None,
+        api_client: Optional[RateLimitedAPIClient] = None,
         cache: Optional[Cache] = None,
         metrics: Optional[MetricsCollector] = None,
-        retry_policy: Optional[RetryPolicy] = None,
+        retry_policy: Optional[Any] = None,
         base_url: str = "https://power.larc.nasa.gov/api/temporal"
     ):
-        self.api_client = api_client or APIClient()
+        self.base_url = base_url
+        self.api_client = api_client or RateLimitedAPIClient(base_url=self.base_url)
         self.cache = cache
         self.metrics = metrics
-        self.retry_policy = retry_policy or RetryPolicy()
-        self.base_url = base_url
+        # self.retry_policy = retry_policy or RetryPolicy()
         self._session: Optional[aiohttp.ClientSession] = None
         
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -254,35 +254,41 @@ class NASAPowerDataSource(DataSource):
                             raise APIError(f"NASA POWER API error: {response.status}")
                             
                         data = await response.json()
+                        logger.debug(f"NASA POWER response keys: {list(data.keys())}")
                         
-                    if 'features' in data and len(data['features']) > 0:
-                        feature = data['features'][0]
-                        properties = feature.get('properties', {})
+                    param_data = {}
+                    if 'properties' in data:
+                        properties = data.get('properties', {})
                         param_data = properties.get('parameter', {}).get(parameter, {})
+                    elif 'parameters' in data:
+                        param_data = data.get('parameters', {}).get(parameter, {})
+                    else:
+                        logger.warning(f"Unexpected NASA POWER response structure: {list(data.keys())[:5]}")
+                        param_data = {}
                         
-                        measurements = []
-                        for date_str, value in param_data.items():
-                            if value is not None and value != -999:
-                                timestamp = datetime.strptime(date_str, "%Y%m%d%H")
+                    measurements = []
+                    for date_str, value in param_data.items():
+                        if value is not None and value != -999:
+                            timestamp = datetime.strptime(date_str, "%Y%m%d%H")
+                            
+                            measurement = Measurement(
+                                sensor=sensor,
+                                timestamp=timestamp,
+                                value=Decimal(str(value)),
+                                quality_flag="validated",
+                                metadata={
+                                    'data_source': 'nasapower',
+                                    'data_version': data.get('header', {}).get('data_version', 'unknown') if 'header' in data else 'unknown'
+                                }
+                            )
+                            measurements.append(measurement)
+                            measurements_count += 1
+                            
+                            if limit and measurements_count >= limit:
+                                break
                                 
-                                measurement = Measurement(
-                                    sensor=sensor,
-                                    timestamp=timestamp,
-                                    value=Decimal(str(value)),
-                                    quality_flag="validated",
-                                    metadata={
-                                        'data_source': 'nasapower',
-                                        'data_version': properties.get('header', {}).get('data_version', 'unknown')
-                                    }
-                                )
-                                measurements.append(measurement)
-                                measurements_count += 1
-                                
-                                if limit and measurements_count >= limit:
-                                    break
-                                    
-                        if measurements:
-                            yield measurements
+                    if measurements:
+                        yield measurements
                             
                 except Exception as e:
                     logger.error(f"Error fetching NASA POWER data for {current_date}: {e}")
@@ -293,6 +299,39 @@ class NASAPowerDataSource(DataSource):
             logger.error(f"Error in NASA POWER measurements: {e}")
             raise DataSourceError(f"Failed to get NASA POWER measurements: {e}")
             
+    async def list_countries(self) -> List[Dict[str, str]]:
+        return [
+            {'code': 'JP', 'name': 'Japan'},
+        ]
+    
+    async def find_locations(
+        self, 
+        country_code: Optional[str] = None,
+        parameter: Optional[str] = None,
+        limit: Optional[int] = None
+    ) -> List[Location]:
+        return await self.get_locations(country=country_code, limit=limit)
+    
+    async def stream_measurements(
+        self,
+        sensor: Sensor,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> AsyncIterator[Measurement]:
+        async for measurements in self.get_measurements(sensor, start_date, end_date):
+            for measurement in measurements:
+                yield measurement
+    
+    async def get_metadata(self) -> Dict[str, Any]:
+        return {
+            'name': 'NASA POWER',
+            'description': 'NASA Prediction Of Worldwide Energy Resources',
+            'resolution': '0.5x0.5 degrees',
+            'temporal': 'Hourly from 2001, Daily from 1984',
+            'api_required': False,
+            'coverage': 'Global'
+        }
+    
     def validate(self, data: Dict[str, Any]) -> bool:
         required_fields = ['timestamp', 'value']
         return all(field in data for field in required_fields)
