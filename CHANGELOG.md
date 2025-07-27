@@ -14,8 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - NASA POWER weather data plugin with free API access
 - Weather-specific parameter types and measurement units
 - download_weather_data.py CLI for weather data collection
+- download_weather_parallel.py for fast parallel weather downloads (5-10x faster)
+- Progress tracking with tqdm including speed metrics and ETA
 - Support for multi-level atmospheric data (surface to 100hPa)
 - Comprehensive weather parameters including temperature, humidity, wind, precipitation, solar radiation, visibility, cloud cover, and dew point
+- Automated scripts for downloading full year data (download_2024_weather_fast.sh)
+
+### Fixed
+- Weather plugin implementations to match DataSource interface
+- NASA POWER API response parsing for hourly data
+- Negative value validation for dew point temperatures
+- Timeout handling for large data requests
+
+### Improved
+- Weather download performance with parallel processing
+- Progress display with real-time speed and ETA calculations
+- Error handling and retry logic for API requests
 - Architecture documentation with Mermaid diagrams
   - High-level component overview
   - Sequence diagrams for download flow

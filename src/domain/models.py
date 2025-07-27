@@ -108,7 +108,7 @@ class Measurement:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
-        if self.value < 0 and self.sensor.parameter not in [ParameterType.TEMPERATURE]:
+        if self.value < 0 and self.sensor.parameter not in [ParameterType.TEMPERATURE, ParameterType.DEW_POINT]:
             raise ValueError(f"Negative value {self.value} for parameter {self.sensor.parameter}")
 
 
