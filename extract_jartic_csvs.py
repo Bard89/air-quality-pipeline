@@ -6,7 +6,7 @@ import shutil
 from tqdm import tqdm
 import io
 
-def extract_month_csvs(archive_path: Path, output_dir: Path):
+def extract_month_csvs(archive_path: Path, output_dir: Path, convert_encoding: bool = True):
     """Extract all CSV files from a JARTIC archive to a directory"""
     
     # Get month from archive name (e.g., jartic_typeB_2024_02.zip)
@@ -50,8 +50,21 @@ def extract_month_csvs(archive_path: Path, output_dir: Path):
                     
                     # Extract CSV
                     csv_data = pref_zip.read(csv_file)
-                    with open(output_path, 'wb') as f:
-                        f.write(csv_data)
+                    
+                    if convert_encoding:
+                        # Convert from Shift-JIS to UTF-8
+                        try:
+                            text = csv_data.decode('shift_jis')
+                            with open(output_path, 'w', encoding='utf-8') as f:
+                                f.write(text)
+                        except:
+                            # Fallback to raw bytes if conversion fails
+                            with open(output_path, 'wb') as f:
+                                f.write(csv_data)
+                    else:
+                        # Write raw bytes
+                        with open(output_path, 'wb') as f:
+                            f.write(csv_data)
                     
                     extracted_count += 1
     
@@ -77,6 +90,8 @@ def main():
                        help='Output directory for CSV files')
     parser.add_argument('--all', action='store_true',
                        help='Extract all archives in cache directory')
+    parser.add_argument('--no-convert', action='store_true',
+                       help='Keep original Shift-JIS encoding (default: convert to UTF-8)')
     
     args = parser.parse_args()
     
@@ -96,11 +111,12 @@ def main():
     print("="*60)
     print(f"Archives to extract: {len(archives)}")
     print(f"Output directory: {args.output_dir}")
+    print(f"Encoding: {'UTF-8 (converted)' if not args.no_convert else 'Shift-JIS (original)'}")
     
     # Process each archive
     total_extracted = 0
     for archive in archives:
-        month_dir, count = extract_month_csvs(archive, args.output_dir)
+        month_dir, count = extract_month_csvs(archive, args.output_dir, convert_encoding=not args.no_convert)
         total_extracted += count
     
     print(f"\n{'='*60}")
