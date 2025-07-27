@@ -123,7 +123,12 @@ async def download_jartic_data(args):
                 
                 sensors = await datasource.get_sensors(location)
                 
+                # Only show sensor progress for sensors we actually process
+                sensors_with_data = []
                 for sensor in sensors:
+                    sensors_with_data.append(sensor)
+                
+                for sensor_idx, sensor in enumerate(sensors_with_data):
                     sensor_desc = f"{sensor.parameter.value}"
                     
                     measurement_count = 0
