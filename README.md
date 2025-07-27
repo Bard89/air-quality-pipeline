@@ -1,6 +1,16 @@
-# Air Quality Data Collection
+# Air Quality & Traffic Data Collection
 
-A minimal, efficient tool for downloading global air quality data from OpenAQ. Downloads sensor-specific measurements with precise coordinates for machine learning applications.
+A minimal, efficient tool for downloading global air quality data from OpenAQ and traffic data from JARTIC (Japan). Downloads sensor-specific measurements with precise coordinates for machine learning applications.
+
+## Features
+
+- **Global air quality data** from OpenAQ with 100+ parameters
+- **Japanese traffic data** from JARTIC (free, no API key required)
+- **Precise GPS coordinates** for each sensor location
+- **Automatic checkpoint/resume** for interrupted downloads
+- **Parallel downloads** with multiple API keys (air quality)
+- **Wide format conversion** for ML-ready datasets
+- **Built-in data analysis** with statistics and visualizations
 
 ## Setup
 
@@ -9,10 +19,14 @@ A minimal, efficient tool for downloading global air quality data from OpenAQ. D
 pip install -r requirements.txt
 ```
 
-2. Get your OpenAQ API key(s):
+2. Configure API keys:
+   **For OpenAQ (air quality data):**
    - Sign up at https://explore.openaq.org/register
    - Create `.env` file: `cp .env.example .env`
    - Add your API key(s) to `.env`
+   
+   **For JARTIC (traffic data):**
+   - No API key required - JARTIC provides free public access
    
    **Single API key:**
    ```
@@ -62,8 +76,28 @@ python download_air_quality.py --country IN --parameters pm25 --country-wide --m
 python download_air_quality.py --country IN --country-wide --max-locations 10 --parallel
 ```
 
+### Download Traffic Data (Japan Only)
+
+```bash
+# List available traffic data archives
+python download_traffic_data.py --list-archives
+
+# List traffic monitoring locations in Japan
+python download_traffic_data.py --list-locations
+
+# Download traffic data for specific date range
+python download_traffic_data.py --start 2024-01-01 --end 2024-01-31
+
+# Download from specific location
+python download_traffic_data.py --location-id 001 --start 2024-01-01 --end 2024-01-31
+
+# Download from first 10 locations only
+python download_traffic_data.py --max-locations 10 --start 2024-01-01 --end 2024-01-31
+```
+
 ### Command Options
 
+**Air Quality (download_air_quality.py):**
 - `--country, -c`: Country code (e.g., US, IN, JP, TH)
 - `--parameters, -p`: Comma-separated parameters (see available parameters below)
 - `--country-wide`: Download ALL available data from a country (no date filtering)
@@ -71,6 +105,16 @@ python download_air_quality.py --country IN --country-wide --max-locations 10 --
 - `--analyze, -a`: Auto-analyze after download (default: true)
 - `--list-countries`: List all available countries
 - `--parallel`: Enable parallel mode for faster downloads (requires multiple API keys)
+
+**Traffic Data (download_traffic_data.py):**
+- `--start, -s`: Start date (YYYY-MM-DD) - required for downloads
+- `--end, -e`: End date (YYYY-MM-DD) - required for downloads
+- `--location-id`: Download data for specific location ID
+- `--max-locations`: Maximum number of locations to download
+- `--list-archives`: Show available JARTIC archives
+- `--list-locations`: Show traffic monitoring locations
+- `--analyze, -a`: Auto-analyze after download (default: true)
+- `--keep-cache`: Keep downloaded archive files in cache
 
 ### Available Parameters
 
@@ -103,11 +147,17 @@ python download_air_quality.py --country IN --country-wide --max-locations 10 --
 
 ## Output
 
+**Air Quality Data:**
 Data is saved to `data/openaq/processed/{country}_airquality_all_{timestamp}.csv`
+
+**Traffic Data:**
+Data is saved to `data/jartic/processed/jp_traffic_{timestamp}.csv`
 
 **Note**: Due to OpenAQ API limitations, the tool now downloads ALL available data from sensors without date filtering. The API ignores date parameters and returns data starting from the oldest available measurements.
 
 ### CSV Format (Long Format)
+
+**Air Quality Data:**
 - `datetime`: UTC timestamp
 - `value`: Measurement value
 - `sensor_id`: Unique sensor identifier
@@ -117,6 +167,15 @@ Data is saved to `data/openaq/processed/{country}_airquality_all_{timestamp}.csv
 - `parameter`: Pollutant type
 - `unit`: Measurement unit
 - `city`, `country`: Geographic info
+
+**Traffic Data:**
+- `timestamp`: UTC timestamp
+- `location_id`: Traffic sensor identifier
+- `location_name`: Human-readable location
+- `latitude`, `longitude`: Sensor coordinates
+- `parameter`: Traffic metric (e.g., vehicle_count, speed)
+- `value`: Measurement value
+- `unit`: Measurement unit
 
 ### Convert to Wide Format
 
@@ -144,7 +203,8 @@ Each download includes:
 ## Project Structure
 
 ```
-├── download_air_quality.py   # Main CLI tool
+├── download_air_quality.py   # Air quality data CLI
+├── download_traffic_data.py  # Traffic data CLI (Japan)
 ├── transform_to_wide.py      # Convert to wide format
 ├── view_checkpoints.py       # View download history
 ├── src/
@@ -160,6 +220,10 @@ Each download includes:
 │   │   ├── data_downloader.py
 │   │   ├── incremental_downloader_all.py  # Downloads all sensor data
 │   │   └── incremental_downloader_parallel.py  # Parallel downloader with location batching
+│   ├── plugins/jartic/      # JARTIC traffic data plugin
+│   │   ├── datasource.py    # JARTIC data source implementation
+│   │   ├── archive_downloader.py  # Historical archive handler
+│   │   └── data_parser.py   # Parse JARTIC CSV formats
 │   └── utils/
 │       ├── data_analyzer.py # Data analysis
 │       └── csv_to_wide_format.py  # Wide format conversion
@@ -197,6 +261,12 @@ Recommended countries with extensive sensor networks:
 - **Asia**: IN (India), CN (China), TH (Thailand), JP (Japan), KR (South Korea)
 - **Europe**: DE (Germany), GB (United Kingdom), PL (Poland)
 - **Americas**: US (United States), MX (Mexico), CL (Chile)
+
+### Traffic Data Availability
+- **Japan**: Historical traffic data available through JARTIC (free, no API key required)
+- Coverage: ~2,600 traffic monitoring locations across Japan
+- Data retention: Historical archives available for download
+- Parameters: Vehicle counts, speeds, and traffic density
 
 ## Performance
 
@@ -309,6 +379,11 @@ When using `--parallel` with multiple API keys:
 - 5 keys: 5x faster (300 req/min, 0.2s delay)
 - 10 keys: 10x faster (600 req/min, 0.1s delay)
 - 100 keys: 100x faster (6,000 req/min, 0.01s delay)
+
+## Data Sources
+
+- **OpenAQ**: Global air quality data from government monitoring stations
+- **JARTIC**: Japan Road Traffic Information Center - free historical traffic data for Japan
 
 ## License
 
