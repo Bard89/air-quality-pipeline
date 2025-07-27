@@ -14,10 +14,10 @@ from io import BytesIO
 from ...domain.interfaces import DataSource
 from ...domain.models import Location, Sensor, Measurement, Coordinates, ParameterType, MeasurementUnit
 from ...domain.exceptions import DataSourceError, APIError
-from ...infrastructure.retry import RetryPolicy, execute_with_retry
+# from ...infrastructure.retry import RetryPolicy, execute_with_retry
 from ...infrastructure.cache import Cache
 from ...infrastructure.metrics import MetricsCollector
-from ...core.api_client import APIClient
+from ...core.api_client import RateLimitedAPIClient
 
 
 logger = logging.getLogger(__name__)
@@ -26,19 +26,19 @@ logger = logging.getLogger(__name__)
 class JMADataSource(DataSource):
     def __init__(
         self,
-        api_client: Optional[APIClient] = None,
+        api_client: Optional[RateLimitedAPIClient] = None,
         cache: Optional[Cache] = None,
         metrics: Optional[MetricsCollector] = None,
-        retry_policy: Optional[RetryPolicy] = None,
+        retry_policy: Optional[Any] = None,
         base_url: str = "https://www.jma.go.jp/bosai",
         jra_ftp_host: str = "ftp.rda.ucar.edu",
         amedas_api_url: str = "https://www.jma.go.jp/bosai/amedas/data/latest_time.txt"
     ):
-        self.api_client = api_client or APIClient()
+        self.base_url = base_url
+        self.api_client = api_client or RateLimitedAPIClient(base_url=self.base_url)
         self.cache = cache
         self.metrics = metrics
-        self.retry_policy = retry_policy or RetryPolicy()
-        self.base_url = base_url
+        # self.retry_policy = retry_policy or RetryPolicy()
         self.jra_ftp_host = jra_ftp_host
         self.amedas_api_url = amedas_api_url
         self._session: Optional[aiohttp.ClientSession] = None
@@ -307,6 +307,39 @@ class JMADataSource(DataSource):
         if demo_measurements:
             yield demo_measurements
             
+    async def list_countries(self) -> List[Dict[str, str]]:
+        return [
+            {'code': 'JP', 'name': 'Japan'},
+        ]
+    
+    async def find_locations(
+        self, 
+        country_code: Optional[str] = None,
+        parameter: Optional[str] = None,
+        limit: Optional[int] = None
+    ) -> List[Location]:
+        return await self.get_locations(country=country_code, limit=limit)
+    
+    async def stream_measurements(
+        self,
+        sensor: Sensor,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> AsyncIterator[Measurement]:
+        async for measurements in self.get_measurements(sensor, start_date, end_date):
+            for measurement in measurements:
+                yield measurement
+    
+    async def get_metadata(self) -> Dict[str, Any]:
+        return {
+            'name': 'JMA',
+            'description': 'Japan Meteorological Agency - AMeDAS stations and JRA-55 reanalysis',
+            'resolution': 'Station data and 1.25x1.25 degrees reanalysis',
+            'temporal': 'Real-time AMeDAS, 6-hourly JRA-55',
+            'api_required': False,
+            'coverage': 'Japan'
+        }
+    
     def validate(self, data: Dict[str, Any]) -> bool:
         required_fields = ['timestamp', 'value']
         return all(field in data for field in required_fields)

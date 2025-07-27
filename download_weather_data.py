@@ -10,8 +10,8 @@ import logging
 
 from src.plugins import get_registry
 from src.domain.models import ParameterType, Location
-from src.core.data_storage import DataStorage
-from src.core.checkpoint_manager import CheckpointManager
+import json
+import csv
 from src.utils.data_analyzer import analyze_dataset
 
 
@@ -59,6 +59,7 @@ async def download_weather_data(
     DataSourceClass = registry.get(source)
     datasource = DataSourceClass()
     
+    csv_file = None
     try:
         param_types = []
         if parameters:
@@ -86,23 +87,33 @@ async def download_weather_data(
         checkpoint_file = Path(f"data/{source}/checkpoints") / f"checkpoint_{country}_{source}_weather.json"
         checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
         
-        checkpoint_manager = CheckpointManager(checkpoint_file)
-        checkpoint_data = checkpoint_manager.load()
+        checkpoint_data = {}
+        if checkpoint_file.exists():
+            with open(checkpoint_file, 'r') as f:
+                checkpoint_data = json.load(f)
         
         start_location_idx = 0
         if checkpoint_data and checkpoint_data.get('output_file') == str(output_file):
             start_location_idx = checkpoint_data.get('current_location_index', 0)
             logger.info(f"Resuming from checkpoint (location {start_location_idx}/{len(locations)})")
         
-        storage = DataStorage(output_file)
-        
         if start_location_idx == 0:
+            csv_file = open(output_file, 'w', newline='', encoding='utf-8')
             headers = [
                 'timestamp', 'value', 'sensor_id', 'location_id', 'location_name',
                 'latitude', 'longitude', 'parameter', 'unit', 'city', 'country',
                 'data_source', 'level', 'quality_flag'
             ]
-            storage.write_headers(headers)
+            csv_writer = csv.DictWriter(csv_file, fieldnames=headers)
+            csv_writer.writeheader()
+        else:
+            csv_file = open(output_file, 'a', newline='', encoding='utf-8')
+            headers = [
+                'timestamp', 'value', 'sensor_id', 'location_id', 'location_name',
+                'latitude', 'longitude', 'parameter', 'unit', 'city', 'country',
+                'data_source', 'level', 'quality_flag'
+            ]
+            csv_writer = csv.DictWriter(csv_file, fieldnames=headers)
         
         total_measurements = 0
         
@@ -143,18 +154,21 @@ async def download_weather_data(
                             measurement_count += 1
                         
                         if rows:
-                            storage.append_measurements(rows)
+                            csv_writer.writerows(rows)
+                            csv_file.flush()
                         
                     logger.info(f"    Retrieved {measurement_count} measurements")
                     total_measurements += measurement_count
                 
-                checkpoint_manager.save({
+                checkpoint_data = {
                     'output_file': str(output_file),
                     'current_location_index': idx + 1,
                     'total_locations': len(locations),
                     'total_measurements': total_measurements,
                     'last_updated': datetime.now(timezone.utc).isoformat()
-                })
+                }
+                with open(checkpoint_file, 'w') as f:
+                    json.dump(checkpoint_data, f, indent=2)
                 
             except Exception as e:
                 logger.error(f"Error processing location {location.name}: {e}")
@@ -167,13 +181,15 @@ async def download_weather_data(
             logger.info("Analyzing dataset...")
             analyze_dataset(str(output_file))
         
-        await datasource.close()
         return output_file
         
     except Exception as e:
         logger.error(f"Download failed: {e}")
-        await datasource.close()
         raise
+    finally:
+        if csv_file:
+            csv_file.close()
+        await datasource.close()
 
 
 def main():

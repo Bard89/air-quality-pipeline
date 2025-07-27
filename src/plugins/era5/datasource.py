@@ -12,10 +12,10 @@ import numpy as np
 from ...domain.interfaces import DataSource
 from ...domain.models import Location, Sensor, Measurement, Coordinates, ParameterType, MeasurementUnit
 from ...domain.exceptions import DataSourceError, APIError
-from ...infrastructure.retry import RetryPolicy, execute_with_retry
+# from ...infrastructure.retry import RetryPolicy, execute_with_retry
 from ...infrastructure.cache import Cache
 from ...infrastructure.metrics import MetricsCollector
-from ...core.api_client import APIClient
+from ...core.api_client import RateLimitedAPIClient
 
 
 logger = logging.getLogger(__name__)
@@ -24,19 +24,19 @@ logger = logging.getLogger(__name__)
 class ERA5DataSource(DataSource):
     def __init__(
         self,
-        api_client: Optional[APIClient] = None,
+        api_client: Optional[RateLimitedAPIClient] = None,
         cache: Optional[Cache] = None,
         metrics: Optional[MetricsCollector] = None,
-        retry_policy: Optional[RetryPolicy] = None,
+        retry_policy: Optional[Any] = None,
         cds_api_key: Optional[str] = None,
         cds_api_url: str = "https://cds.climate.copernicus.eu/api/v2"
     ):
-        self.api_client = api_client or APIClient()
-        self.cache = cache
-        self.metrics = metrics
-        self.retry_policy = retry_policy or RetryPolicy()
         self.cds_api_key = cds_api_key or os.environ.get('CDS_API_KEY')
         self.cds_api_url = cds_api_url
+        self.api_client = api_client or RateLimitedAPIClient(base_url=self.cds_api_url)
+        self.cache = cache
+        self.metrics = metrics
+        # self.retry_policy = retry_policy or RetryPolicy()
         self._session: Optional[aiohttp.ClientSession] = None
         
         if not self.cds_api_key:
@@ -292,6 +292,39 @@ class ERA5DataSource(DataSource):
         
         yield []
         
+    async def list_countries(self) -> List[Dict[str, str]]:
+        return [
+            {'code': 'JP', 'name': 'Japan'},
+        ]
+    
+    async def find_locations(
+        self, 
+        country_code: Optional[str] = None,
+        parameter: Optional[str] = None,
+        limit: Optional[int] = None
+    ) -> List[Location]:
+        return await self.get_locations(country=country_code, limit=limit)
+    
+    async def stream_measurements(
+        self,
+        sensor: Sensor,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> AsyncIterator[Measurement]:
+        async for measurements in self.get_measurements(sensor, start_date, end_date):
+            for measurement in measurements:
+                yield measurement
+    
+    async def get_metadata(self) -> Dict[str, Any]:
+        return {
+            'name': 'ERA5',
+            'description': 'ECMWF ERA5 Reanalysis',
+            'resolution': '0.25x0.25 degrees',
+            'temporal': 'Hourly from 1940 to present',
+            'api_required': True,
+            'coverage': 'Global'
+        }
+    
     def validate(self, data: Dict[str, Any]) -> bool:
         required_fields = ['timestamp', 'value']
         return all(field in data for field in required_fields)
