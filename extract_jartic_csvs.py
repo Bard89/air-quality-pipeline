@@ -12,9 +12,15 @@ def extract_month_csvs(archive_path: Path, output_dir: Path, convert_encoding: b
     # Get month from archive name (e.g., jartic_typeB_2024_02.zip)
     parts = archive_path.stem.split('_')
     if len(parts) >= 4:
-        year = parts[2]
-        month = parts[3]
-        month_dir = output_dir / f"{year}_{month}"
+        try:
+            year = parts[2]
+            month = parts[3]
+            # Validate year and month are numeric
+            int(year)
+            int(month)
+            month_dir = output_dir / f"{year}_{month}"
+        except (ValueError, IndexError):
+            month_dir = output_dir / archive_path.stem
     else:
         month_dir = output_dir / archive_path.stem
     
@@ -57,7 +63,7 @@ def extract_month_csvs(archive_path: Path, output_dir: Path, convert_encoding: b
                             text = csv_data.decode('shift_jis')
                             with open(output_path, 'w', encoding='utf-8') as f:
                                 f.write(text)
-                        except:
+                        except (UnicodeDecodeError, UnicodeEncodeError):
                             # Fallback to raw bytes if conversion fails
                             with open(output_path, 'wb') as f:
                                 f.write(csv_data)
@@ -97,7 +103,17 @@ def main():
     
     # Find archives to process
     if args.archive:
-        archives = [args.archive] if args.archive.exists() else []
+        if args.archive.exists():
+            # Validate it's a ZIP file
+            try:
+                with zipfile.ZipFile(args.archive, 'r') as test_zip:
+                    # Just test if it can be opened
+                    pass
+                archives = [args.archive]
+            except zipfile.BadZipFile:
+                parser.error(f"File is not a valid ZIP archive: {args.archive}")
+        else:
+            archives = []
     elif args.all:
         archives = sorted(args.cache_dir.glob("jartic_typeB_*.zip"))
     else:

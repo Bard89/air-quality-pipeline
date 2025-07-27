@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import csv
+import io
 from tqdm import tqdm
 
 from src.core.data_storage import DataStorage
@@ -30,7 +31,6 @@ def process_csv_file(csv_path: Path, start_date: datetime, end_date: datetime, o
             content = f.read()
     
     # Process the content
-    import io
     with io.StringIO(content) as f:
         reader = csv.reader(f)
         next(reader)  # Skip header
@@ -64,7 +64,7 @@ def process_csv_file(csv_path: Path, start_date: datetime, end_date: datetime, o
                 )
                 count += 1
                 
-            except Exception:
+            except (ValueError, IndexError):
                 continue
     
     return count
@@ -106,11 +106,16 @@ def main():
                 try:
                     dir_date = datetime(int(year), int(month), 1, tzinfo=timezone.utc)
                     # Check if this month overlaps with our date range
-                    if (dir_date.year == start_date.year and dir_date.month >= start_date.month) or \
-                       (dir_date.year == end_date.year and dir_date.month <= end_date.month) or \
-                       (start_date.year < dir_date.year < end_date.year):
+                    # Create last day of the month for comparison
+                    if dir_date.month == 12:
+                        month_end = datetime(dir_date.year + 1, 1, 1, tzinfo=timezone.utc) - timedelta(days=1)
+                    else:
+                        month_end = datetime(dir_date.year, dir_date.month + 1, 1, tzinfo=timezone.utc) - timedelta(days=1)
+                    
+                    # Check if month overlaps with date range
+                    if not (month_end < start_date or dir_date > end_date):
                         csv_files.extend(month_dir.glob('*.csv'))
-                except:
+                except (ValueError, TypeError):
                     continue
     
     if not csv_files:
