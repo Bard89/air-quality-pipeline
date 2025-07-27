@@ -87,19 +87,34 @@ python download_jartic_archives.py --start 2024-01 --end 2024-12
 python download_jartic_archives.py --start 2024-01 --end 2024-03 --cache-dir /custom/path
 ```
 
-#### Step 2: Process Archives
+#### Step 2: Extract CSV Files
 ```bash
-# Extract all traffic data (recommended - gets ALL sensors)
-python process_jartic_simple.py --start 2024-01-01 --end 2024-01-31
+# Extract a specific month (converts to UTF-8 by default)
+python extract_jartic_csvs.py --archive data/jartic/cache/jartic_typeB_2024_02.zip
 
-# Count measurements first for accurate progress
-python process_jartic_simple_v2.py --start 2024-01-01 --end 2024-01-31
+# Extract all downloaded archives
+python extract_jartic_csvs.py --all
 
-# Process with parallel workers
-python process_jartic_archives.py --start 2024-01-01 --end 2024-01-31 --workers 8
+# Keep original Shift-JIS encoding
+python extract_jartic_csvs.py --archive data/jartic/cache/jartic_typeB_2024_02.zip --no-convert
+```
 
-# Process limited locations only
-python process_jartic_archives.py --start 2024-01-01 --end 2024-01-31 --max-locations 100
+#### Step 3: Process Extracted Data
+```bash
+# Process specific date range
+python process_extracted_csvs.py --start 2024-02-01 --end 2024-02-28
+
+# Process specific month directory
+python process_extracted_csvs.py --start 2024-02-01 --end 2024-02-28 --month 2024_02
+```
+
+#### Optional: Convert Encoding
+```bash
+# Convert existing Shift-JIS files to UTF-8
+python convert_jartic_encoding.py --input-dir data/jartic/extracted/2024_02
+
+# Convert in-place with backups
+python convert_jartic_encoding.py --input-dir data/jartic/extracted/2024_02 --in-place
 ```
 
 ### Command Options
@@ -119,15 +134,22 @@ python process_jartic_archives.py --start 2024-01-01 --end 2024-01-31 --max-loca
 - `--cache-dir`: Cache directory for archives (default: data/jartic/cache)
 
 **JARTIC Processing Scripts:**
-- `process_jartic_simple.py`: Extract all traffic data from archives
+- `extract_jartic_csvs.py`: Extract CSV files from archives
+  - `--archive, -a`: Specific archive to extract
+  - `--all`: Extract all archives in cache directory
+  - `--output-dir, -o`: Output directory (default: data/jartic/extracted)
+  - `--no-convert`: Keep Shift-JIS encoding (default: convert to UTF-8)
+  
+- `process_extracted_csvs.py`: Process extracted CSV files
   - `--start, -s`: Start date (YYYY-MM-DD)
   - `--end, -e`: End date (YYYY-MM-DD)
-  - `--cache-dir`: Archive directory
+  - `--input-dir, -i`: Directory with extracted CSVs
+  - `--month, -m`: Specific month directory (e.g., 2024_02)
   
-- `process_jartic_archives.py`: Process with location filtering
-  - `--workers, -w`: Number of parallel workers (default: 4)
-  - `--max-locations`: Limit number of locations
-  - `--analyze, -a`: Analyze data after processing
+- `convert_jartic_encoding.py`: Convert file encoding
+  - `--input-dir, -i`: Directory with Shift-JIS files
+  - `--output-dir, -o`: Output directory for UTF-8 files
+  - `--in-place`: Convert files in place (with backups)
 
 ### Available Parameters
 
@@ -287,10 +309,12 @@ Recommended countries with extensive sensor networks:
 Downloaded traffic data includes:
 - `timestamp`: ISO 8601 format with 5-minute intervals
 - `location_id`: JARTIC sensor ID (e.g., JARTIC_21001)
-- `location_name`: Japanese road name (romanized)
+- `location_name`: Japanese road name
 - `parameter`: traffic_volume (vehicles/5min)
 - `prefecture`: Prefecture name from archive
 - Note: Coordinates are placeholder (0,0) - actual mapping in development
+
+**Encoding Note**: JARTIC CSV files use Shift-JIS encoding. The extraction script automatically converts to UTF-8 for easier processing. Use `--no-convert` to keep original encoding.
 
 ## Performance
 

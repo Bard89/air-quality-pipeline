@@ -14,7 +14,24 @@ def process_csv_file(csv_path: Path, start_date: datetime, end_date: datetime, o
     count = 0
     prefecture = csv_path.stem.split('_')[0]  # Get prefecture from filename
     
-    with open(csv_path, 'r', encoding='shift_jis', errors='ignore') as f:
+    # Try UTF-8 first (if files were converted), fallback to Shift-JIS
+    encodings = ['utf-8', 'shift_jis']
+    
+    for encoding in encodings:
+        try:
+            with open(csv_path, 'r', encoding=encoding) as f:
+                content = f.read()
+                break
+        except UnicodeDecodeError:
+            continue
+    else:
+        # If all encodings fail, use shift_jis with errors='ignore'
+        with open(csv_path, 'r', encoding='shift_jis', errors='ignore') as f:
+            content = f.read()
+    
+    # Process the content
+    import io
+    with io.StringIO(content) as f:
         reader = csv.reader(f)
         next(reader)  # Skip header
         
