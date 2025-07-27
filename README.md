@@ -78,21 +78,28 @@ python download_air_quality.py --country IN --country-wide --max-locations 10 --
 
 ### Download Traffic Data (Japan Only)
 
+#### Step 1: Download Archives
 ```bash
-# List available traffic data archives
-python download_traffic_data.py --list-archives
+# Download JARTIC archives for specific months
+python download_jartic_archives.py --start 2024-01 --end 2024-12
 
-# List traffic monitoring locations in Japan
-python download_traffic_data.py --list-locations
+# Download with custom cache directory
+python download_jartic_archives.py --start 2024-01 --end 2024-03 --cache-dir /custom/path
+```
 
-# Download traffic data for specific date range
-python download_traffic_data.py --start 2024-01-01 --end 2024-01-31
+#### Step 2: Process Archives
+```bash
+# Extract all traffic data (recommended - gets ALL sensors)
+python process_jartic_simple.py --start 2024-01-01 --end 2024-01-31
 
-# Download from specific location
-python download_traffic_data.py --location-id 001 --start 2024-01-01 --end 2024-01-31
+# Count measurements first for accurate progress
+python process_jartic_simple_v2.py --start 2024-01-01 --end 2024-01-31
 
-# Download from first 10 locations only
-python download_traffic_data.py --max-locations 10 --start 2024-01-01 --end 2024-01-31
+# Process with parallel workers
+python process_jartic_archives.py --start 2024-01-01 --end 2024-01-31 --workers 8
+
+# Process limited locations only
+python process_jartic_archives.py --start 2024-01-01 --end 2024-01-31 --max-locations 100
 ```
 
 ### Command Options
@@ -106,15 +113,21 @@ python download_traffic_data.py --max-locations 10 --start 2024-01-01 --end 2024
 - `--list-countries`: List all available countries
 - `--parallel`: Enable parallel mode for faster downloads (requires multiple API keys)
 
-**Traffic Data (download_traffic_data.py):**
-- `--start, -s`: Start date (YYYY-MM-DD) - required for downloads
-- `--end, -e`: End date (YYYY-MM-DD) - required for downloads
-- `--location-id`: Download data for specific location ID
-- `--max-locations`: Maximum number of locations to download
-- `--list-archives`: Show available JARTIC archives
-- `--list-locations`: Show traffic monitoring locations
-- `--analyze, -a`: Auto-analyze after download (default: true)
-- `--keep-cache`: Keep downloaded archive files in cache
+**JARTIC Archive Download (download_jartic_archives.py):**
+- `--start, -s`: Start month (YYYY-MM)
+- `--end, -e`: End month (YYYY-MM)
+- `--cache-dir`: Cache directory for archives (default: data/jartic/cache)
+
+**JARTIC Processing Scripts:**
+- `process_jartic_simple.py`: Extract all traffic data from archives
+  - `--start, -s`: Start date (YYYY-MM-DD)
+  - `--end, -e`: End date (YYYY-MM-DD)
+  - `--cache-dir`: Archive directory
+  
+- `process_jartic_archives.py`: Process with location filtering
+  - `--workers, -w`: Number of parallel workers (default: 4)
+  - `--max-locations`: Limit number of locations
+  - `--analyze, -a`: Analyze data after processing
 
 ### Available Parameters
 
@@ -267,6 +280,17 @@ Recommended countries with extensive sensor networks:
 - Coverage: ~2,600 traffic monitoring locations across Japan
 - Data retention: Historical archives available for download
 - Parameters: Vehicle counts, speeds, and traffic density
+- Archive size: ~4GB per month (compressed)
+- Update frequency: 5-minute intervals
+
+### JARTIC Data Format
+Downloaded traffic data includes:
+- `timestamp`: ISO 8601 format with 5-minute intervals
+- `location_id`: JARTIC sensor ID (e.g., JARTIC_21001)
+- `location_name`: Japanese road name (romanized)
+- `parameter`: traffic_volume (vehicles/5min)
+- `prefecture`: Prefecture name from archive
+- Note: Coordinates are placeholder (0,0) - actual mapping in development
 
 ## Performance
 
