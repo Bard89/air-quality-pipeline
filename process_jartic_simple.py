@@ -51,8 +51,8 @@ def main():
     with open(output_path, 'w') as f:
         f.write("timestamp,location_id,location_name,latitude,longitude,parameter,value,unit,prefecture\n")
     
-    # Estimate total measurements (rough estimate: ~10M per archive for full month)
-    estimated_total = len(archives) * 10_000_000
+    # Estimate total measurements (rough estimate: ~100M per archive for full month)
+    estimated_total = len(archives) * 100_000_000
     
     # Create custom progress bar format
     bar_format = '{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}'
