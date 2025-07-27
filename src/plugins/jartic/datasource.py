@@ -227,12 +227,12 @@ class JARTICDataSource(DataSource):
         locations = []
 
         major_cities = [
-            ("JARTIC_001", "Tokyo Station Area", "35.6812", "139.7671", "Tokyo", "Kanto"),
-            ("JARTIC_002", "Osaka Station Area", "34.7025", "135.4959", "Osaka", "Kansai"),
-            ("JARTIC_003", "Nagoya Station Area", "35.1709", "136.8815", "Nagoya", "Chubu"),
+            ("JARTIC_001", "Tokyo Station Area", "35.6812", "139.7671", "Tokyo", "Kanto", "tokyo"),
+            ("JARTIC_002", "Osaka Station Area", "34.7025", "135.4959", "Osaka", "Kansai", "osaka"),
+            ("JARTIC_003", "Nagoya Station Area", "35.1709", "136.8815", "Nagoya", "Chubu", "aichi"),
         ]
 
-        for loc_id, name, lat, lon, city, region in major_cities:
+        for loc_id, name, lat, lon, city, region, prefecture in major_cities:
             locations.append(
                 Location(
                     id=loc_id,
@@ -244,7 +244,7 @@ class JARTICDataSource(DataSource):
                     city=city,
                     country="JP",
                     provider="JARTIC",
-                    metadata={"region": region, "has_5min_data": True}
+                    metadata={"region": region, "prefecture": prefecture, "has_5min_data": True}
                 )
             )
 
