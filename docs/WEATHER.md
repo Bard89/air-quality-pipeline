@@ -10,8 +10,9 @@ The weather module provides access to multiple meteorological data sources with 
 # List available sources
 python download_weather_data.py --list-sources
 
-# Download from JMA AMeDAS (most granular - 1,286 stations)
-python download_weather_parallel.py --source jma --country JP --start 2024-01-01 --end 2024-01-31
+# JMA AMeDAS - Note: Only provides recent data (last few days), not historical
+# For January 2024 data, use Open-Meteo or NASA POWER instead
+python download_weather_parallel.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
 
 # Download from Open-Meteo (high resolution grid)
 python download_weather_parallel.py --source openmeteo --country JP --start 2024-01-01 --end 2024-12-31
@@ -22,12 +23,13 @@ python download_weather_data.py --source nasapower --country JP --max-locations 
 
 ## Data Sources Comparison
 
-### 🌡️ JMA AMeDAS (Most Granular)
+### 🌡️ JMA AMeDAS (Most Granular - Recent Data Only)
 - **Stations**: 1,286 weather stations across Japan
 - **Temporal**: 10-minute intervals
 - **Type**: Actual ground measurements
 - **API Key**: Not required
-- **Best for**: High-frequency Japan-specific analysis
+- **Limitation**: Only provides recent data (last few days)
+- **Best for**: Real-time monitoring, not historical analysis
 
 ### 🌍 Open-Meteo (Best Balance)
 - **Resolution**: 0.1° × 0.1° (~11km grid)
@@ -134,14 +136,14 @@ timestamp,value,sensor_id,location_id,location_name,latitude,longitude,parameter
 ```bash
 # For comprehensive Japan weather data in 2024:
 
-# Option 1: Highest granularity (10-min intervals)
-python download_weather_parallel.py --source jma --country JP --start 2024-01-01 --end 2024-12-31
-
-# Option 2: High resolution grid (hourly)
+# Option 1: High resolution grid (Open-Meteo)
 python download_weather_parallel.py --source openmeteo --country JP --start 2024-01-01 --end 2024-12-31 --max-locations 500
 
-# Option 3: Quick overview
+# Option 2: NASA POWER (quick overview)
 python download_weather_parallel.py --source nasapower --country JP --start 2024-01-01 --end 2024-12-31
+
+# Option 3: ERA5 (requires API key)
+python download_weather_parallel.py --source era5 --country JP --start 2024-01-01 --end 2024-12-31
 ```
 
 ## Automated Scripts
@@ -154,10 +156,10 @@ python download_weather_parallel.py --source nasapower --country JP --start 2024
 
 ## Common Use Cases
 
-### High-Frequency Analysis
+### High-Resolution Analysis
 ```bash
-# JMA AMeDAS for 10-minute resolution
-python download_weather_parallel.py --source jma --country JP --start 2024-07-01 --end 2024-07-31 --max-locations 50
+# Open-Meteo for 0.1° grid resolution
+python download_weather_parallel.py --source openmeteo --country JP --start 2024-07-01 --end 2024-07-31 --max-locations 200
 ```
 
 ### Spatial Coverage Study
