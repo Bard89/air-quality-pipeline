@@ -20,10 +20,10 @@ python download_weather_incremental.py --source jma --country JP --start [recent
 python download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-01-31 --max-locations 15
 
 # Download full year data
-# Open-Meteo (recommended - fastest)
+# Open-Meteo (recommended - fastest for historical data)
 python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-12-31 --max-concurrent 10
 
-# NASA POWER (slower but reliable)
+# NASA POWER (slower but reliable alternative)
 python download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-12-31 --max-concurrent 10
 ```
 
@@ -159,7 +159,7 @@ python download_weather_incremental.py --source era5 --country JP --start 2024-0
 ### Download Full Year
 ```bash
 # Downloads 2024 weather data month by month
-./download_2024_weather_fast.sh  # Note: Update to use incremental script
+./download_2024_weather_fast.sh  # Uses download_weather_incremental.py internally
 ```
 
 ## Common Use Cases
