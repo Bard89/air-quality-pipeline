@@ -33,7 +33,8 @@ class PluginRegistry:
             'jartic',
             'jma',
             'era5',
-            'nasapower'
+            'nasapower',
+            'openmeteo'
         ]
         
         for module_name in plugin_modules:
