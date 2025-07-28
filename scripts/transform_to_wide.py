@@ -6,6 +6,11 @@ import pandas as pd
 def transform_to_wide(input_csv: str) -> str:
     print(f"Reading {input_csv}...")
     df = pd.read_csv(input_csv, parse_dates=['datetime'])
+    
+    required_columns = ['datetime', 'location_id', 'location_name', 'latitude', 'longitude', 'parameter', 'value', 'unit']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        raise ValueError(f"Missing required columns: {missing_columns}")
 
     print(f"Data shape: {len(df)} rows")
     print(f"Date range: {df['datetime'].min()} to {df['datetime'].max()}")

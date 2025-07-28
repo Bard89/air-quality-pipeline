@@ -1,61 +1,35 @@
-# Air quality related data collection tool
+# Environmental Data Collector
 
-## Able to collect
+Downloads air quality, weather, and traffic data.
 
-- **Air Quality/Pollution measurements**
-- **Weather**
-- **Traffic**
-
-## Quick Start
+## Setup
 
 ```bash
-# Install dependencies
 pip install -r requirements.txt
+cp .env.example .env  # Add your API keys
+```
 
-# Configure API keys (if needed)
-cp .env.example .env
+## Usage
 
-# Download air quality data
-python download_air_quality.py --country JP --max-locations 10 --parallel
+```bash
+# Air quality
+python scripts/download_air_quality.py --country JP --max-locations 10 --parallel
 
-# Download weather data (use incremental version for large datasets)
-python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
+# Weather  
+python scripts/download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
 
-# Download traffic data
-python download_jartic_archives.py --start 2024-01 --end 2024-12
+# Traffic
+python scripts/download_jartic_archives.py --start 2024-01 --end 2024-12
 ```
 
 ## Data Sources
 
-### 📊 [Air Quality Data](docs/AIR_QUALITY.md)
-- **OpenAQ**
+- **Air Quality**: OpenAQ
+- **Weather**: Open-Meteo, NASA POWER, ERA5, JMA
+- **Traffic**: JARTIC (Japan only)
 
-### 🌤️ [Weather Data](docs/WEATHER.md)
-- **Open-Meteo**
-- **NASA POWER**
-- **ERA5**
-- **JMA AMeDAS**
+## Docs
 
-### 🚗 [Traffic Data](docs/TRAFFIC.md)
-- **JARTIC**
-
-```
-src/
-├── domain/          # Core business models and interfaces
-├── application/     # CLI commands and orchestration
-├── infrastructure/  # Storage, caching, retry logic
-└── plugins/         # Data source implementations
-    ├── openaq/      # Air quality
-    ├── jartic/      # Traffic data
-    ├── jma/         # Japanese weather
-    ├── era5/        # ERA5 reanalysis
-    └── nasapower/   # NASA weather
-```
-## Documentation
-
-- [Air Quality Data Guide](docs/AIR_QUALITY.md)
-- [Weather Data Guide](docs/WEATHER.md)
-- [Traffic Data Guide](docs/TRAFFIC.md)
-- [Architecture Overview](ARCHITECTURE.md)
-
-MIT License
+- [Air Quality](docs/AIR_QUALITY.md)
+- [Weather](docs/WEATHER.md)
+- [Traffic](docs/TRAFFIC.md)
