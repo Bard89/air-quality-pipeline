@@ -1,6 +1,6 @@
 # Multi-Modal Environmental Data Collection Platform
 
-A comprehensive data collection system for environmental monitoring, featuring air quality, weather, and traffic data from multiple sources. Built with a Domain-Driven Design (DDD) architecture for extensibility and reliability.
+A data collection system for environmental monitoring, featuring air quality, weather, and traffic data from multiple sources. WIP
 
 ## Overview
 
@@ -63,27 +63,9 @@ src/
     ├── era5/        # ERA5 reanalysis
     └── nasapower/   # NASA weather
 ```
-
-## Key Features
-
-- **Incremental Downloads**: Progressive writing for large datasets
-- **Checkpoint/Resume**: Automatic recovery from interruptions
-- **Plugin Architecture**: Easy to add new data sources
-- **Data Validation**: Automatic quality checks
-- **Multiple Formats**: Long format for storage, wide format for ML
-- **Built-in Analysis**: Statistical summaries and visualizations
-
-## Performance
-
-- **Sequential**: ~10 measurements/second
-- **Parallel**: ~100+ measurements/second
-- **Multi-key rotation**: Linear scaling with API keys
-- **Checkpoint system**: Zero data loss on interruption
-
 ## Documentation
 
 - [Air Quality Data Guide](docs/AIR_QUALITY.md)
 - [Weather Data Guide](docs/WEATHER.md)
 - [Traffic Data Guide](docs/TRAFFIC.md)
 - [Architecture Overview](ARCHITECTURE.md)
-- [API Documentation](docs/API.md)
