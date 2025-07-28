@@ -240,6 +240,12 @@ class JMADataSource(DataSource):
             current_date = start_date or datetime.now()
             end = end_date or datetime.now()
             
+            # JMA AMeDAS only provides recent data (last 48-72 hours)
+            max_history = datetime.now() - timedelta(days=3)
+            if current_date < max_history:
+                logger.warning(f"JMA AMeDAS only provides data from {max_history.strftime('%Y-%m-%d')} onwards. Requested date {current_date.strftime('%Y-%m-%d')} is too old.")
+                return
+            
             measurements_count = 0
             
             # AMeDAS provides data in 10-minute intervals
@@ -351,11 +357,12 @@ class JMADataSource(DataSource):
     async def get_metadata(self) -> Dict[str, Any]:
         return {
             'name': 'JMA',
-            'description': 'Japan Meteorological Agency - AMeDAS stations and JRA-55 reanalysis',
-            'resolution': 'Station data and 1.25x1.25 degrees reanalysis',
-            'temporal': 'Real-time AMeDAS, 6-hourly JRA-55',
+            'description': 'Japan Meteorological Agency - AMeDAS stations (recent data only) and JRA-55 reanalysis',
+            'resolution': 'Station data (1,286 stations) and 1.25x1.25 degrees reanalysis',
+            'temporal': 'AMeDAS: 10-minute intervals (last 48-72 hours only), JRA-55: 6-hourly',
             'api_required': False,
-            'coverage': 'Japan'
+            'coverage': 'Japan',
+            'limitations': 'AMeDAS provides only recent data (2-3 days). For historical data use Open-Meteo or NASA POWER.'
         }
     
     def validate(self, data: Dict[str, Any]) -> bool:
