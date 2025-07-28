@@ -31,8 +31,8 @@ WEATHER_PARAMETERS = {
     'temperature': ParameterType.TEMPERATURE,
     'humidity': ParameterType.HUMIDITY,
     'pressure': ParameterType.PRESSURE,
-    'windspeed': ParameterType.WINDSPEED,
-    'winddirection': ParameterType.WINDDIRECTION,
+    'windspeed': ParameterType.WIND_SPEED,
+    'winddirection': ParameterType.WIND_DIRECTION,
     'precipitation': ParameterType.PRECIPITATION,
     'solar_radiation': ParameterType.SOLAR_RADIATION,
     'visibility': ParameterType.VISIBILITY,
@@ -57,7 +57,7 @@ async def download_weather_data(
     max_locations: Optional[int] = None,
     analyze: bool = True,
     output_dir: Optional[Path] = None
-) -> Path:
+) -> Optional[Path]:
     registry = get_registry()
     registry.auto_discover()
     
@@ -108,6 +108,13 @@ async def download_weather_data(
             with open(checkpoint_file, 'r') as f:
                 checkpoint_data = json.load(f)
         
+        # Define headers once
+        headers = [
+            'timestamp', 'value', 'sensor_id', 'location_id', 'location_name',
+            'latitude', 'longitude', 'parameter', 'unit', 'city', 'country',
+            'data_source', 'level', 'quality_flag'
+        ]
+        
         start_location_idx = 0
         if checkpoint_data and checkpoint_data.get('output_file') == str(output_file):
             start_location_idx = checkpoint_data.get('current_location_index', 0)
@@ -115,20 +122,10 @@ async def download_weather_data(
         
         if start_location_idx == 0:
             csv_file = open(output_file, 'w', newline='', encoding='utf-8')
-            headers = [
-                'timestamp', 'value', 'sensor_id', 'location_id', 'location_name',
-                'latitude', 'longitude', 'parameter', 'unit', 'city', 'country',
-                'data_source', 'level', 'quality_flag'
-            ]
             csv_writer = csv.DictWriter(csv_file, fieldnames=headers)
             csv_writer.writeheader()
         else:
             csv_file = open(output_file, 'a', newline='', encoding='utf-8')
-            headers = [
-                'timestamp', 'value', 'sensor_id', 'location_id', 'location_name',
-                'latitude', 'longitude', 'parameter', 'unit', 'city', 'country',
-                'data_source', 'level', 'quality_flag'
-            ]
             csv_writer = csv.DictWriter(csv_file, fieldnames=headers)
         
         total_measurements = checkpoint_data.get('total_measurements', 0) if checkpoint_data else 0

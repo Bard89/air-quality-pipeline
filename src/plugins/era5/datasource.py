@@ -131,12 +131,12 @@ class ERA5DataSource(DataSource):
                 'single_level': 'surface_pressure',
                 'unit': MeasurementUnit.HECTOPASCALS
             },
-            ParameterType.WINDSPEED: {
+            ParameterType.WIND_SPEED: {
                 'single_level': '10m_u_component_of_wind',
                 'pressure_level': 'u_component_of_wind',
                 'unit': MeasurementUnit.METERS_PER_SECOND
             },
-            ParameterType.WINDDIRECTION: {
+            ParameterType.WIND_DIRECTION: {
                 'single_level': '10m_v_component_of_wind',
                 'pressure_level': 'v_component_of_wind',
                 'unit': MeasurementUnit.DEGREES
@@ -236,8 +236,8 @@ class ERA5DataSource(DataSource):
             ParameterType.TEMPERATURE: (15.0, 25.0),
             ParameterType.HUMIDITY: (40.0, 80.0),
             ParameterType.PRESSURE: (1000.0, 1020.0),
-            ParameterType.WINDSPEED: (0.0, 15.0),
-            ParameterType.WINDDIRECTION: (0.0, 360.0),
+            ParameterType.WIND_SPEED: (0.0, 15.0),
+            ParameterType.WIND_DIRECTION: (0.0, 360.0),
             ParameterType.PRECIPITATION: (0.0, 5.0),
             ParameterType.SOLAR_RADIATION: (0.0, 800.0),
             ParameterType.CLOUD_COVER: (0.0, 100.0),
@@ -285,6 +285,17 @@ class ERA5DataSource(DataSource):
         end_date: Optional[datetime] = None,
         limit: Optional[int] = None
     ) -> AsyncIterator[List[Measurement]]:
+        """
+        Placeholder implementation for ERA5 data fetching.
+        
+        This method requires the cdsapi package to be installed and configured
+        with valid CDS API credentials. Actual implementation pending.
+        
+        To use ERA5 data:
+        1. Install cdsapi: pip install cdsapi
+        2. Register at https://cds.climate.copernicus.eu/
+        3. Configure credentials in ~/.cdsapirc or CDSAPI_KEY environment variable
+        """
         logger.info(f"ERA5 data download requires cdsapi Python package")
         logger.info(f"Install: pip install cdsapi")
         logger.info(f"Configure: Create ~/.cdsapirc with your CDS credentials")

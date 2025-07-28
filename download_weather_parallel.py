@@ -10,7 +10,6 @@ import logging
 import time
 import json
 import csv
-from concurrent.futures import ThreadPoolExecutor
 import aiohttp
 
 from src.plugins import get_registry
@@ -34,8 +33,8 @@ WEATHER_PARAMETERS = {
     'temperature': ParameterType.TEMPERATURE,
     'humidity': ParameterType.HUMIDITY,
     'pressure': ParameterType.PRESSURE,
-    'windspeed': ParameterType.WINDSPEED,
-    'winddirection': ParameterType.WINDDIRECTION,
+    'windspeed': ParameterType.WIND_SPEED,
+    'winddirection': ParameterType.WIND_DIRECTION,
     'precipitation': ParameterType.PRECIPITATION,
     'solar_radiation': ParameterType.SOLAR_RADIATION,
     'visibility': ParameterType.VISIBILITY,
@@ -263,7 +262,8 @@ async def download_weather_data_parallel(
     finally:
         # Close all datasource connections
         for ds in datasources:
-            await ds.close()
+            if ds is not None:
+                await ds.close()
 
 
 def main():

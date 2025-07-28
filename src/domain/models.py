@@ -27,8 +27,6 @@ class ParameterType(str, Enum):
     CLOUD_COVER = "cloud_cover"
     DEW_POINT = "dew_point"
     HUMIDITY = "humidity"
-    WINDSPEED = "windspeed"
-    WINDDIRECTION = "winddirection"
     # Traffic parameters
     TRAFFIC_VOLUME = "traffic_volume"
     VEHICLE_SPEED = "vehicle_speed"

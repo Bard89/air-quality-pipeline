@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 
 class NASAPowerDataSource(DataSource):
+    # NASA POWER uses -999 as a sentinel value for missing/invalid data
+    MISSING_DATA_VALUE = -999
+    
     def __init__(
         self,
         api_client: Optional[RateLimitedAPIClient] = None,
@@ -124,6 +127,9 @@ class NASAPowerDataSource(DataSource):
                     }
                 )
                 locations.append(location)
+            # Break outer loop if limit reached
+            if limit and len(locations) >= limit:
+                break
                 
         return locations
         
@@ -151,12 +157,12 @@ class NASAPowerDataSource(DataSource):
                 'unit': MeasurementUnit.HECTOPASCALS,
                 'description': 'Surface pressure'
             },
-            ParameterType.WINDSPEED: {
+            ParameterType.WIND_SPEED: {
                 'parameter': 'WS10M',
                 'unit': MeasurementUnit.METERS_PER_SECOND,
                 'description': 'Wind speed at 10 meters'
             },
-            ParameterType.WINDDIRECTION: {
+            ParameterType.WIND_DIRECTION: {
                 'parameter': 'WD10M',
                 'unit': MeasurementUnit.DEGREES,
                 'description': 'Wind direction at 10 meters'
@@ -223,8 +229,6 @@ class NASAPowerDataSource(DataSource):
             start = start_date or datetime.now() - timedelta(days=7)
             end = end_date or datetime.now()
             
-            format_date = lambda d: d.strftime('%Y%m%d')
-            
             current_date = start
             measurements_count = 0
             
@@ -233,8 +237,8 @@ class NASAPowerDataSource(DataSource):
                 
                 url = f"{self.base_url}/hourly/point"
                 params = {
-                    'start': format_date(current_date),
-                    'end': format_date(chunk_end),
+                    'start': current_date.strftime('%Y%m%d'),
+                    'end': chunk_end.strftime('%Y%m%d'),
                     'latitude': lat,
                     'longitude': lon,
                     'community': 'RE',
@@ -270,7 +274,7 @@ class NASAPowerDataSource(DataSource):
                         
                     measurements = []
                     for date_str, value in param_data.items():
-                        if value is not None and value != -999:
+                        if value is not None and value != self.MISSING_DATA_VALUE:
                             timestamp = datetime.strptime(date_str, "%Y%m%d%H")
                             
                             measurement = Measurement(

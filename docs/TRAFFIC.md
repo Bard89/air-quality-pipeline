@@ -108,7 +108,7 @@ timestamp,location_id,location_name,latitude,longitude,parameter,value,unit,pref
 2024-02-15T10:00:00+09:00,JARTIC_21001,国道1号線東京,0.0,0.0,traffic_volume,125,vehicles/5min,Tokyo,jartic
 ```
 
-**Note**: Coordinates are currently placeholders (0,0). Actual location mapping is in development.
+**Note**: Coordinates are currently set to placeholders (0,0) for all locations. This is temporary - actual GPS coordinates will be added in a future update through geocoding of the Japanese location names. For now, use the location_id and location_name fields for matching.
 
 ## Encoding Notes
 
@@ -199,6 +199,8 @@ Traffic data can be combined with:
 
 Example merge:
 ```python
+import pandas as pd
+
 # Merge traffic with weather data
 traffic_df = pd.read_csv('jp_traffic_202402.csv')
 weather_df = pd.read_csv('jp_jma_weather_20240201_to_20240229.csv')
