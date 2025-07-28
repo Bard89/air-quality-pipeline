@@ -14,7 +14,10 @@ python check_weather_data.py
 python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
 
 # Download recent data from JMA (last 3 days only)
-python download_weather_incremental.py --source jma --country JP --start [recent-date] --end [today]
+# First, get the dates:
+START=$(date -I -d "2 days ago")
+END=$(date -I)
+python download_weather_incremental.py --source jma --country JP --start $START --end $END
 
 # Download from NASA POWER (slower but reliable)
 python download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-01-31 --max-locations 15
@@ -154,12 +157,20 @@ python download_weather_incremental.py --source nasapower --country JP --start 2
 python download_weather_incremental.py --source era5 --country JP --start 2024-01-01 --end 2024-12-31
 ```
 
-## Automated Scripts
+## Automated Downloads
 
 ### Download Full Year
 ```bash
 # Downloads 2024 weather data month by month
-./download_2024_weather_fast.sh  # Uses download_weather_incremental.py internally
+# Example: Loop through each month
+for month in 01 02 03 04 05 06 07 08 09 10 11 12; do
+    python download_weather_incremental.py \
+        --source openmeteo \
+        --country JP \
+        --start "2024-$month-01" \
+        --end "2024-$month-$(date -d "2024-$month-01 +1 month -1 day" +%d)" \
+        --max-concurrent 10
+done
 ```
 
 ## Common Use Cases
@@ -193,7 +204,9 @@ python download_weather_incremental.py --source openmeteo --country JP --start 2
 python download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-01-31 --max-concurrent 10 &
 
 # JMA - Recent data only (specify dates within last 3 days)
-python download_weather_incremental.py --source jma --country JP --start [recent-date] --end [today] --max-concurrent 10
+START=$(date -I -d "2 days ago")
+END=$(date -I)
+python download_weather_incremental.py --source jma --country JP --start $START --end $END --max-concurrent 10
 ```
 
 ### Performance Expectations
