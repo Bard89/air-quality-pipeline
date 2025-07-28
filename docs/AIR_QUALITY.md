@@ -13,7 +13,7 @@ python download_air_quality.py --list-countries
 # Download PM2.5 data from Japan (10 locations)
 python download_air_quality.py --country JP --parameters pm25 --max-locations 10 --country-wide
 
-# Download all parameters with parallel mode (faster)
+# Download all parameters with parallel mode (faster with multiple API keys)
 python download_air_quality.py --country IN --country-wide --max-locations 50 --parallel
 ```
 

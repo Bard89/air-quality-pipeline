@@ -135,8 +135,11 @@ Edit `src/plugins/__init__.py`:
 plugin_modules = [
     'openaq',
     'jartic',
+    'jma',
+    'era5',
+    'nasapower',
+    'openmeteo',
     'yourplugin',  # Add here
-    # ...
 ]
 ```
 
@@ -158,7 +161,7 @@ class YourPluginDataSource(DataSource):
 
 For resumable downloads:
 ```python
-from ...infrastructure.checkpoint import CheckpointManager
+from ...core.checkpoint_manager import CheckpointManager
 
 checkpoint = CheckpointManager("yourplugin")
 state = checkpoint.load() or {"last_location": 0}
@@ -227,3 +230,13 @@ See `src/plugins/openaq/` for a complete implementation example featuring:
 - Parameter filtering
 - Location discovery
 - Sensor management
+
+## Available Plugins
+
+Currently implemented plugins:
+- `openaq` - OpenAQ air quality data
+- `jartic` - Japan Road Traffic Information Center
+- `jma` - Japan Meteorological Agency
+- `nasapower` - NASA POWER weather data
+- `openmeteo` - Open-Meteo weather data
+- `era5` - ERA5 reanalysis data

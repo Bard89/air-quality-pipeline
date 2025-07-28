@@ -242,32 +242,54 @@ classDiagram
     Measurement --> Sensor
 ```
 
-## Parallel Download Strategy
+## Download Strategy
 
 ```mermaid
 graph TD
-    subgraph "Download Decision Logic"
+    subgraph "Download Mode Decision"
         START[Start Download]
-        CHECK{Sensors < 10?}
-        BATCH_LOC[Batch by Location]
-        BATCH_SENS[Batch by Sensor Pages]
+        CHECK{Parallel Mode?}
+        SEQUENTIAL[Sequential Download]
+        PARALLEL[Parallel Download]
     end
     
-    subgraph "Location Batching"
-        L1[Location 1<br/>All sensors]
-        L2[Location 2<br/>All sensors]
-        L3[Location N<br/>All sensors]
+    subgraph "Sequential Processing"
+        SEQ1[Location 1 → Sensors → Measurements]
+        SEQ2[Location 2 → Sensors → Measurements]
+        SEQN[Location N → Sensors → Measurements]
     end
     
-    subgraph "Sensor Page Batching"
-        S1[Sensor 1<br/>Pages 1-4]
-        S2[Sensor 2<br/>Pages 1-4]
-        S3[Sensor N<br/>Pages 1-4]
+    subgraph "Parallel Processing"
+        subgraph "Batch Decision"
+            CHECK2{Sensors < 10?}
+            BATCH_LOC[Batch by Location]
+            BATCH_SENS[Batch by Sensor Pages]
+        end
+        
+        subgraph "Location Batching"
+            L1[Location 1<br/>All sensors]
+            L2[Location 2<br/>All sensors]
+            L3[Location N<br/>All sensors]
+        end
+        
+        subgraph "Sensor Page Batching"
+            S1[Sensor 1<br/>Pages 1-4]
+            S2[Sensor 2<br/>Pages 1-4]
+            S3[Sensor N<br/>Pages 1-4]
+        end
     end
     
     START --> CHECK
-    CHECK -->|Yes| BATCH_LOC
-    CHECK -->|No| BATCH_SENS
+    CHECK -->|No| SEQUENTIAL
+    CHECK -->|Yes| PARALLEL
+    
+    SEQUENTIAL --> SEQ1
+    SEQ1 --> SEQ2
+    SEQ2 --> SEQN
+    
+    PARALLEL --> CHECK2
+    CHECK2 -->|Yes| BATCH_LOC
+    CHECK2 -->|No| BATCH_SENS
     
     BATCH_LOC --> L1
     BATCH_LOC --> L2
@@ -370,10 +392,11 @@ project-root/
 ### Throughput
 - **Single Key**: 60 requests/minute
 - **Multi Key (N keys)**: N × 60 requests/minute
-- **Parallel Mode**: Concurrent requests across all keys
+- **Parallel Mode**: Concurrent requests across all keys (requires multiple API keys)
 - **Checkpoint Saves**: After each location (not sensor)
-- **CSV Writes**: Incremental after each sensor
+- **CSV Writes**: Incremental after each sensor (append mode)
 - **API Limit**: Max 16 pages (16,000 measurements) per sensor
+- **Download Mode**: All downloads are incremental (resumable)
 
 ### Memory Usage
 - **Peak Memory**: ~200-500MB during parallel downloads (varies by concurrent keys)

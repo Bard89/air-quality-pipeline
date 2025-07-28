@@ -20,7 +20,7 @@ pip install -r requirements.txt
 cp .env.example .env
 
 # Download air quality data
-python download_air_quality.py --country JP --max-locations 10 --parallel
+python download_air_quality.py --country JP --max-locations 10 --country-wide
 
 # Download weather data
 python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
@@ -87,11 +87,3 @@ src/
 - [Traffic Data Guide](docs/TRAFFIC.md)
 - [Architecture Overview](ARCHITECTURE.md)
 - [API Documentation](docs/API.md)
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
-
-## License
-
-MIT License - see [LICENSE](LICENSE) for details.

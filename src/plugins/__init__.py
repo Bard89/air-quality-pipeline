@@ -28,8 +28,6 @@ class PluginRegistry:
     def auto_discover(self, module_path: str = "src.plugins") -> None:
         plugin_modules = [
             'openaq',
-            'purpleair',
-            'waqi',
             'jartic',
             'jma',
             'era5',
