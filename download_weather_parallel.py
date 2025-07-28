@@ -61,12 +61,14 @@ async def download_location_data(
             sensors = await datasource.get_sensors(location, parameters=parameters)
             
             # Split large date ranges into monthly chunks
-            current_start = start_date
-            while current_start < end_date:
+            current_start = start_date or datetime.now(timezone.utc) - timedelta(days=30)
+            final_end = end_date or datetime.now(timezone.utc)
+            
+            while current_start < final_end:
                 # Calculate chunk end (max 1 month)
                 next_month = current_start.replace(day=1) + timedelta(days=32)
                 next_month = next_month.replace(day=1)
-                chunk_end = min(next_month - timedelta(days=1), end_date)
+                chunk_end = min(next_month - timedelta(days=1), final_end)
                 
                 for sensor in sensors:
                     try:
