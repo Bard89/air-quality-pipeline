@@ -89,8 +89,16 @@ async def download_weather_data(
         output_dir = output_dir or Path(f"data/{source}/processed")
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        output_file = output_dir / f"{country.lower()}_{source}_weather_{timestamp}.csv"
+        # Create filename with date range
+        if start_date and end_date:
+            date_start = start_date.strftime("%Y%m%d")
+            date_end = end_date.strftime("%Y%m%d")
+            filename = f"{country.lower()}_{source}_weather_{date_start}_to_{date_end}.csv"
+        else:
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            filename = f"{country.lower()}_{source}_weather_{timestamp}.csv"
+        
+        output_file = output_dir / filename
         
         checkpoint_file = Path(f"data/{source}/checkpoints") / f"checkpoint_{country}_{source}_weather.json"
         checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
