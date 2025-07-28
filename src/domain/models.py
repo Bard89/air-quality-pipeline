@@ -21,6 +21,12 @@ class ParameterType(str, Enum):
     PRESSURE = "pressure"
     WIND_SPEED = "windspeed"
     WIND_DIRECTION = "winddirection"
+    PRECIPITATION = "precipitation"
+    SOLAR_RADIATION = "solar_radiation"
+    VISIBILITY = "visibility"
+    CLOUD_COVER = "cloud_cover"
+    DEW_POINT = "dew_point"
+    HUMIDITY = "humidity"
     # Traffic parameters
     TRAFFIC_VOLUME = "traffic_volume"
     VEHICLE_SPEED = "vehicle_speed"
@@ -39,6 +45,11 @@ class MeasurementUnit(str, Enum):
     HECTOPASCALS = "hpa"
     METERS_PER_SECOND = "m/s"
     DEGREES = "degrees"
+    MILLIMETERS = "mm"
+    WATTS_PER_SQUARE_METER = "W/m²"
+    METERS = "m"
+    OKTAS = "oktas"
+    MINUTES = "minutes"
     # Traffic measurement units
     VEHICLES_PER_HOUR = "vehicles/hour"
     VEHICLES_PER_5MIN = "vehicles/5min"
@@ -95,7 +106,7 @@ class Measurement:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
-        if self.value < 0 and self.sensor.parameter not in [ParameterType.TEMPERATURE]:
+        if self.value < 0 and self.sensor.parameter not in [ParameterType.TEMPERATURE, ParameterType.DEW_POINT]:
             raise ValueError(f"Negative value {self.value} for parameter {self.sensor.parameter}")
 
 
