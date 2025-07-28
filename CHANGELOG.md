@@ -9,12 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Weather data collection support for Japan
-- JMA (Japan Meteorological Agency) plugin for AMeDAS stations and JRA-55 reanalysis
+- JMA (Japan Meteorological Agency) plugin for AMeDAS stations (last 3 days only)
 - ERA5 weather data plugin with 0.25° resolution and atmospheric layers
 - NASA POWER weather data plugin with free API access
 - Weather-specific parameter types and measurement units
-- download_weather_data.py CLI for weather data collection
-- download_weather_parallel.py for fast parallel weather downloads (5-10x faster)
+- download_weather_incremental.py CLI for memory-efficient weather data collection
 - Progress tracking with tqdm including speed metrics and ETA
 - Support for multi-level atmospheric data (surface to 100hPa)
 - Comprehensive weather parameters including temperature, humidity, wind, precipitation, solar radiation, visibility, cloud cover, and dew point
@@ -25,11 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - NASA POWER API response parsing for hourly data
 - Negative value validation for dew point temperatures
 - Timeout handling for large data requests
+- CSV escaping issues in weather data output
+- Resource management and file handle cleanup in incremental downloader
 
 ### Improved
-- Weather download performance with parallel processing
+- Weather download performance with incremental writing to disk
 - Progress display with real-time speed and ETA calculations
 - Error handling and retry logic for API requests
+- Memory efficiency for large dataset downloads
 - Architecture documentation with Mermaid diagrams
   - High-level component overview
   - Sequence diagrams for download flow
@@ -46,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Enhanced project documentation structure
+- Replaced parallel weather downloader with incremental version for better memory efficiency
+- Updated all weather download scripts to use incremental downloader
 
 ## [1.0.0] - 2025-01-26
 

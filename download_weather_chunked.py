@@ -10,7 +10,7 @@ def download_chunk(start_date, end_date, max_locations=10, max_concurrent=10):
     print(f"\nDownloading {start_date} to {end_date}...")
     
     cmd = [
-        "python", "download_weather_parallel.py",
+        "python", "download_weather_incremental.py",
         "--source", "nasapower",
         "--country", "JP",
         "--max-locations", str(max_locations),
