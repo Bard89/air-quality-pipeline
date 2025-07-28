@@ -16,7 +16,7 @@ for month in 01 02 03 04 05 06 07 08 09 10 11 12; do
     esac
     
     echo "Downloading 2024-$month..."
-    python download_weather_parallel.py \
+    python download_weather_incremental.py \
         --source nasapower \
         --country JP \
         --max-locations 10 \

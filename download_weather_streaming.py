@@ -5,6 +5,7 @@ Streaming weather data download - saves data progressively to avoid memory issue
 
 import asyncio
 import csv
+import io
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -37,8 +38,15 @@ class StreamingCSVWriter:
         
     async def initialize(self):
         """Write headers to file"""
+        # Use StringIO and csv.writer for proper header escaping
+        output = io.StringIO()
+        writer = csv.writer(output, lineterminator='\n')
+        writer.writerow(self.headers)
+        header_content = output.getvalue()
+        output.close()
+        
         async with aiofiles.open(self.output_file, 'w', newline='', encoding='utf-8') as f:
-            await f.write(','.join(self.headers) + '\n')
+            await f.write(header_content)
     
     async def write_measurements(self, measurements: List[Dict[str, Any]]):
         """Write measurements to file with lock"""
@@ -46,13 +54,16 @@ class StreamingCSVWriter:
             return
             
         async with self.lock:
+            # Use StringIO and csv.DictWriter for proper CSV escaping
+            output = io.StringIO()
+            writer = csv.DictWriter(output, fieldnames=self.headers, lineterminator='\n')
+            writer.writerows(measurements)
+            csv_content = output.getvalue()
+            output.close()
+            
             async with aiofiles.open(self.output_file, 'a', encoding='utf-8') as f:
-                for row in measurements:
-                    # Create CSV line manually to avoid DictWriter overhead
-                    values = [str(row.get(h, '')) for h in self.headers]
-                    csv_line = ','.join(values) + '\n'
-                    await f.write(csv_line)
-                    self.row_count += 1
+                await f.write(csv_content)
+                self.row_count += len(measurements)
 
 
 async def download_location_data_streaming(
@@ -169,108 +180,113 @@ async def download_weather_data_streaming(
     for _ in range(max_concurrent):
         datasources.append(plugins[source]())
     
-    # Get locations
-    locations = await datasources[0].get_locations(country=country, limit=max_locations)
-    if not locations:
-        logger.error(f"No locations found for country: {country}")
-        return None
+    try:
+        # Get locations
+        locations = await datasources[0].get_locations(country=country, limit=max_locations)
+        if not locations:
+            logger.error(f"No locations found for country: {country}")
+            return None
+        
+        # Setup output
+        output_dir = output_dir or Path(f"data/{source}/processed")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        date_start = start_date.strftime("%Y%m%d") if start_date else "latest"
+        date_end = end_date.strftime("%Y%m%d") if end_date else "latest"
+        filename = f"{country.lower()}_{source}_weather_{date_start}_to_{date_end}.csv"
+        output_file = output_dir / filename
     
-    # Setup output
-    output_dir = output_dir or Path(f"data/{source}/processed")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    date_start = start_date.strftime("%Y%m%d") if start_date else "latest"
-    date_end = end_date.strftime("%Y%m%d") if end_date else "latest"
-    filename = f"{country.lower()}_{source}_weather_{date_start}_to_{date_end}.csv"
-    output_file = output_dir / filename
-    
-    # Setup CSV writer
-    headers = [
-        'timestamp', 'value', 'sensor_id', 'location_id', 'location_name',
-        'latitude', 'longitude', 'parameter', 'unit', 'city', 'country',
-        'data_source', 'level', 'quality_flag'
-    ]
-    csv_writer = StreamingCSVWriter(output_file, headers)
-    await csv_writer.initialize()
-    
-    # Parameter types
-    param_map = {
-        'temperature': ParameterType.TEMPERATURE,
-        'humidity': ParameterType.HUMIDITY,
-        'pressure': ParameterType.PRESSURE,
-        'wind_speed': ParameterType.WIND_SPEED,
-        'wind_direction': ParameterType.WIND_DIRECTION,
-        'precipitation': ParameterType.PRECIPITATION,
-        'solar_radiation': ParameterType.SOLAR_RADIATION,
-        'visibility': ParameterType.VISIBILITY,
-        'cloud_cover': ParameterType.CLOUD_COVER,
-        'dew_point': ParameterType.DEW_POINT
-    }
-    
-    if parameters:
-        param_types = [param_map[p] for p in parameters if p in param_map]
-    else:
-        param_types = list(param_map.values())
-    
-    # Setup progress tracking
-    semaphore = asyncio.Semaphore(max_concurrent)
-    start_time = time.time()
-    
-    logger.info(f"Starting streaming download for {len(locations)} locations")
-    logger.info(f"Data will be saved progressively to {output_file}")
-    
-    # Create tasks
-    tasks = []
-    for i, location in enumerate(locations):
-        ds = datasources[i % len(datasources)]
-        task = download_location_data_streaming(
-            ds, location, param_types, start_date, end_date, 
-            source, csv_writer, semaphore
-        )
-        tasks.append((location.name, task))
-    
-    # Process with progress bar
-    total_measurements = 0
-    
-    if TQDM_AVAILABLE:
-        with tqdm(total=len(tasks), desc="Downloading", unit="loc") as pbar:
-            for name, task in tasks:
-                pbar.set_description(f"Processing {name[:20]}")
+        # Setup CSV writer
+        headers = [
+            'timestamp', 'value', 'sensor_id', 'location_id', 'location_name',
+            'latitude', 'longitude', 'parameter', 'unit', 'city', 'country',
+            'data_source', 'level', 'quality_flag'
+        ]
+        csv_writer = StreamingCSVWriter(output_file, headers)
+        await csv_writer.initialize()
+        
+        # Parameter types
+        param_map = {
+            'temperature': ParameterType.TEMPERATURE,
+            'humidity': ParameterType.HUMIDITY,
+            'pressure': ParameterType.PRESSURE,
+            'wind_speed': ParameterType.WIND_SPEED,
+            'wind_direction': ParameterType.WIND_DIRECTION,
+            'precipitation': ParameterType.PRECIPITATION,
+            'solar_radiation': ParameterType.SOLAR_RADIATION,
+            'visibility': ParameterType.VISIBILITY,
+            'cloud_cover': ParameterType.CLOUD_COVER,
+            'dew_point': ParameterType.DEW_POINT
+        }
+        
+        if parameters:
+            param_types = [param_map[p] for p in parameters if p in param_map]
+        else:
+            param_types = list(param_map.values())
+        
+        # Setup progress tracking
+        semaphore = asyncio.Semaphore(max_concurrent)
+        start_time = time.time()
+        
+        logger.info(f"Starting streaming download for {len(locations)} locations")
+        logger.info(f"Data will be saved progressively to {output_file}")
+        
+        # Create tasks
+        tasks = []
+        for i, location in enumerate(locations):
+            ds = datasources[i % len(datasources)]
+            task = download_location_data_streaming(
+                ds, location, param_types, start_date, end_date, 
+                source, csv_writer, semaphore
+            )
+            tasks.append((location.name, task))
+        
+        # Process with progress bar
+        total_measurements = 0
+        
+        if TQDM_AVAILABLE:
+            with tqdm(total=len(tasks), desc="Downloading", unit="loc") as pbar:
+                for name, task in tasks:
+                    pbar.set_description(f"Processing {name[:20]}")
+                    try:
+                        count = await task
+                        total_measurements += count
+                        pbar.set_postfix(measurements=f"{total_measurements:,}")
+                    except Exception as e:
+                        logger.error(f"Failed to download {name}: {e}")
+                    pbar.update(1)
+        else:
+            for i, (name, task) in enumerate(tasks):
+                logger.info(f"Processing {i+1}/{len(tasks)}: {name}")
                 try:
                     count = await task
                     total_measurements += count
-                    pbar.set_postfix(measurements=f"{total_measurements:,}")
+                    logger.info(f"  Downloaded {count:,} measurements (Total: {total_measurements:,})")
                 except Exception as e:
                     logger.error(f"Failed to download {name}: {e}")
-                pbar.update(1)
-    else:
-        for i, (name, task) in enumerate(tasks):
-            logger.info(f"Processing {i+1}/{len(tasks)}: {name}")
-            try:
-                count = await task
-                total_measurements += count
-                logger.info(f"  Downloaded {count:,} measurements (Total: {total_measurements:,})")
-            except Exception as e:
-                logger.error(f"Failed to download {name}: {e}")
-    
-    # Print summary
-    total_time = time.time() - start_time
-    avg_speed = total_measurements / total_time if total_time > 0 else 0
-    
-    logger.info("=" * 80)
-    logger.info(f"Download complete!")
-    logger.info(f"Total measurements: {total_measurements:,}")
-    logger.info(f"Total time: {total_time/60:.1f} minutes")
-    logger.info(f"Average speed: {avg_speed:.1f} measurements/second")
-    logger.info(f"Data saved to: {output_file}")
-    logger.info("=" * 80)
-    
-    # Cleanup
-    for ds in datasources:
-        if hasattr(ds, 'close'):
-            await ds.close()
-    
-    return output_file
+        
+        # Print summary
+        total_time = time.time() - start_time
+        avg_speed = total_measurements / total_time if total_time > 0 else 0
+        
+        logger.info("=" * 80)
+        logger.info(f"Download complete!")
+        logger.info(f"Total measurements: {total_measurements:,}")
+        logger.info(f"Total time: {total_time/60:.1f} minutes")
+        logger.info(f"Average speed: {avg_speed:.1f} measurements/second")
+        logger.info(f"Data saved to: {output_file}")
+        logger.info("=" * 80)
+        
+        return output_file
+        
+    finally:
+        # Cleanup - always close datasources
+        for ds in datasources:
+            if hasattr(ds, 'close'):
+                try:
+                    await ds.close()
+                except Exception as e:
+                    logger.error(f"Error closing datasource: {e}")
 
 
 async def main():

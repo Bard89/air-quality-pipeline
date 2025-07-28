@@ -16,10 +16,10 @@ async def compare_weather_sources():
         'jma': {
             'name': 'JMA (Japan Meteorological Agency)',
             'features': [
-                '✓ 1,286 AMeDAS weather stations across Japan',
+                '✓ 1,300+ AMeDAS weather stations across Japan',
                 '✓ 10-minute measurement intervals',
                 '✓ Highest spatial density for Japan',
-                '✓ Real-time data',
+                '✓ Real-time data (last 3 days only)',
                 '✓ Free access via API',
                 '✓ Parameters: temp, humidity, pressure, wind, precip, solar, visibility'
             ]
@@ -93,14 +93,14 @@ async def compare_weather_sources():
     print()
     print("Commands to download 2024 data:")
     print("-" * 80)
-    print("# JMA AMeDAS (1,286 stations, 10-minute data):")
-    print("python download_weather_parallel.py --source jma --country JP --start 2024-01-01 --end 2024-12-31 --max-locations 100")
+    print("# JMA AMeDAS (1,300+ stations, 10-minute data - recent only):")
+    print("python download_weather_incremental.py --source jma --country JP --start [recent-date] --end [today] --max-locations 100")
     print()
-    print("# Open-Meteo (0.1° grid, hourly):")
-    print("python download_weather_parallel.py --source openmeteo --country JP --start 2024-01-01 --end 2024-12-31 --max-locations 100")
+    print("# Open-Meteo (0.1° grid, hourly - recommended for historical):")
+    print("python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-12-31 --max-locations 100")
     print()
-    print("# For full Japan coverage with JMA AMeDAS:")
-    print("python download_weather_parallel.py --source jma --country JP --start 2024-01-01 --end 2024-12-31")
+    print("# For NASA POWER (slower but reliable):")
+    print("python download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-12-31")
 
 if __name__ == "__main__":
     asyncio.run(compare_weather_sources())

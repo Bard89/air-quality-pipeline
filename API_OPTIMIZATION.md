@@ -1,65 +1,80 @@
 # API Request Optimization Strategies
 
-This document outlines the strategies implemented to minimize OpenAQ API requests.
+This document outlines the strategies implemented to optimize OpenAQ API usage.
 
-## 1. Batch Requests for Multiple Locations
+## 1. Multi-Key Support
 
-Instead of requesting data for each sensor individually, we now support batch requests:
-- The `/measurements` endpoint accepts multiple location IDs
-- Groups up to 10 locations per request to avoid URL length limits
-- Reduces requests by up to 10x for locations with multiple sensors
+The system supports multiple API keys for increased throughput:
+- Each API key provides 60 requests/minute
+- Keys are rotated automatically to distribute load
+- Sequential mode: Uses keys in rotation
+- Parallel mode: Uses all keys concurrently
 
 **Example**: 
-- Old: 100 sensors = 100 API requests
-- New: 100 sensors from 20 locations = 20 API requests
+- 1 key: 60 requests/minute
+- 10 keys: 600 requests/minute (10x faster)
 
-## 2. Increased Chunk Size
+## 2. Parallel Download Mode
 
-Changed default time chunk from 3 days to 90 days:
-- 3-day chunks for 1 year = 122 requests per sensor
-- 90-day chunks for 1 year = 5 requests per sensor
-- **24x reduction in API calls**
+When `--parallel` flag is used with multiple API keys:
+- Concurrent requests across all available keys
+- Smart batching based on sensor count:
+  - < 10 sensors per location: Batch by location
+  - ≥ 10 sensors per location: Batch by sensor pages
+- Automatic retry and error handling
 
-## 3. Smart Location Selection
+## 3. Incremental Download & Checkpoints
 
-New `--smart` flag automatically selects high-quality locations:
-- Prioritizes locations with multiple active sensors
-- Ensures parameter diversity
-- Limits to 20 best locations by default
-- Shows data volume estimates before download
+All downloads are incremental and resumable:
+- CSV files are written incrementally after each sensor
+- Checkpoint saved after each location
+- Automatic resume from last position if interrupted
+- No data loss on failures
 
-## 4. Automatic Batch Mode Detection
+## 4. API Limit Handling
 
-The script automatically uses batch mode when:
-- Multiple sensors are from the same locations (>2 sensors/location)
-- Total locations < 100
+Built-in handling for OpenAQ API limitations:
+- Max 16 pages (16,000 measurements) per sensor
+- Page 17+ requests timeout automatically
+- Parallel mode skips problematic pages
+- Rate limiting enforced per key
 
 ## 5. Usage Recommendations
 
-### For Minimal API Usage:
+### For Optimal Performance:
 
 ```bash
-# Use smart mode with specific parameters
-./download_air_quality.py --country IN --days 30 --parameters pm25 --smart
+# Single key (standard speed)
+python download_air_quality.py --country JP --country-wide
 
-# Limit sensors per parameter
-./download_air_quality.py --country US --days 7 --parameters pm25,pm10 --limit-sensors 5
+# Multiple keys (faster)
+# Set OPENAQ_API_KEY_01, OPENAQ_API_KEY_02, etc.
+python download_air_quality.py --country JP --country-wide --parallel
 
-# Use batch download for year-long data
-./download_air_quality.py --country TH --start 2024-01-01 --end 2024-12-31 --smart
+# Limit scope for testing
+python download_air_quality.py --country IN --max-locations 10 --country-wide
 ```
 
-### API Request Estimates:
+### Performance Estimates:
 
-| Scenario | Old Method | New Method | Reduction |
-|----------|------------|------------|-----------|
-| 100 sensors, 30 days | 1,000 requests | 10 requests | 100x |
-| 500 sensors, 1 year | 61,000 requests | 28 requests | 2,178x |
-| 50 locations, 90 days | 5,000 requests | 5 requests | 1,000x |
+| Configuration | Speed | Best For |
+|--------------|-------|----------|
+| 1 key, sequential | 60 req/min | Small datasets |
+| 3 keys, parallel | 180 req/min | Medium datasets |
+| 10 keys, parallel | 600 req/min | Large country-wide downloads |
 
-## 6. Future Optimizations
+## 6. Memory Optimization
 
-Potential further improvements:
-- Cache location metadata
-- Implement resume capability for interrupted downloads
-- Add data density detection to skip sparse periods
+Memory usage scales with concurrent operations:
+- Sequential mode: ~100MB baseline
+- Parallel mode with 10 keys: ~300MB
+- Parallel mode with 100 keys: ~1-2GB
+
+Data is written incrementally to prevent memory accumulation.
+
+## 7. Best Practices
+
+1. **Use --country-wide**: OpenAQ v3 ignores date filters, so always download all available data
+2. **Enable parallel mode**: When you have multiple API keys for faster downloads
+3. **Monitor checkpoints**: Check `data/openaq/checkpoints/` for progress
+4. **Limit locations for testing**: Use `--max-locations` to test with smaller datasets first
