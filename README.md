@@ -16,13 +16,13 @@ pip install -r requirements.txt
 cp .env.example .env
 
 # Download air quality data
-python download_air_quality.py --country JP --max-locations 10 --parallel
+python scripts/download_air_quality.py --country JP --max-locations 10 --parallel
 
 # Download weather data (use incremental version for large datasets)
-python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
+python scripts/download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
 
 # Download traffic data
-python download_jartic_archives.py --start 2024-01 --end 2024-12
+python scripts/download_jartic_archives.py --start 2024-01 --end 2024-12
 ```
 
 ## Data Sources

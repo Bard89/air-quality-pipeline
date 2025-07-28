@@ -8,26 +8,26 @@ The weather module provides access to multiple meteorological data sources with 
 
 ```bash
 # List available sources
-python check_weather_data.py
+python scripts/check_weather_data.py
 
 # Download historical data (Open-Meteo recommended)
-python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
+python scripts/download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
 
 # Download recent data from JMA (last 3 days only)
 # First, get the dates:
 START=$(date -I -d "2 days ago")
 END=$(date -I)
-python download_weather_incremental.py --source jma --country JP --start $START --end $END
+python scripts/download_weather_incremental.py --source jma --country JP --start $START --end $END
 
 # Download from NASA POWER (slower but reliable)
-python download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-01-31 --max-locations 15
+python scripts/download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-01-31 --max-locations 15
 
 # Download full year data
 # Open-Meteo (recommended - fastest for historical data)
-python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-12-31 --max-concurrent 10
+python scripts/download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-12-31 --max-concurrent 10
 
 # NASA POWER (slower but reliable alternative)
-python download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-12-31 --max-concurrent 10
+python scripts/download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-12-31 --max-concurrent 10
 ```
 
 ## Data Sources Comparison
@@ -84,7 +84,7 @@ All sources provide these core parameters:
 
 ### Download Command
 ```bash
-python download_weather_incremental.py [OPTIONS]
+python scripts/download_weather_incremental.py [OPTIONS]
 ```
 - Writes data progressively to disk in batches
 - Handles large datasets without memory issues
@@ -148,13 +148,13 @@ timestamp,value,sensor_id,location_id,location_name,latitude,longitude,parameter
 # For comprehensive Japan weather data in 2024:
 
 # Option 1: High resolution grid (Open-Meteo)
-python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-12-31 --max-locations 500
+python scripts/download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-12-31 --max-locations 500
 
 # Option 2: NASA POWER (quick overview)
-python download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-12-31
+python scripts/download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-12-31
 
 # Option 3: ERA5 (requires API key)
-python download_weather_incremental.py --source era5 --country JP --start 2024-01-01 --end 2024-12-31
+python scripts/download_weather_incremental.py --source era5 --country JP --start 2024-01-01 --end 2024-12-31
 ```
 
 ## Automated Downloads
@@ -164,7 +164,7 @@ python download_weather_incremental.py --source era5 --country JP --start 2024-0
 # Downloads 2024 weather data month by month
 # Example: Loop through each month
 for month in 01 02 03 04 05 06 07 08 09 10 11 12; do
-    python download_weather_incremental.py \
+    python scripts/download_weather_incremental.py \
         --source openmeteo \
         --country JP \
         --start "2024-$month-01" \
@@ -178,19 +178,19 @@ done
 ### High-Resolution Analysis
 ```bash
 # Open-Meteo for 0.1° grid resolution
-python download_weather_incremental.py --source openmeteo --country JP --start 2024-07-01 --end 2024-07-31 --max-locations 200
+python scripts/download_weather_incremental.py --source openmeteo --country JP --start 2024-07-01 --end 2024-07-31 --max-locations 200
 ```
 
 ### Spatial Coverage Study
 ```bash
 # Open-Meteo for dense grid coverage
-python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31 --max-locations 300
+python scripts/download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31 --max-locations 300
 ```
 
 ### Multi-Level Atmospheric Data
 ```bash
 # ERA5 for atmospheric profiles (requires API key)
-python download_weather_incremental.py --source era5 --country JP --start 2024-01-01 --end 2024-01-31
+python scripts/download_weather_incremental.py --source era5 --country JP --start 2024-01-01 --end 2024-01-31
 ```
 
 ## Downloading Full Year Data
@@ -198,15 +198,15 @@ python download_weather_incremental.py --source era5 --country JP --start 2024-0
 ### Parallel Commands for All Sources (January example)
 ```bash
 # Open-Meteo - January 2024, all locations (~500 grid points)
-python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31 --max-concurrent 10 &
+python scripts/download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31 --max-concurrent 10 &
 
 # NASA POWER - January 2024, all locations (~100 grid points)
-python download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-01-31 --max-concurrent 10 &
+python scripts/download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-01-31 --max-concurrent 10 &
 
 # JMA - Recent data only (specify dates within last 3 days)
 START=$(date -I -d "2 days ago")
 END=$(date -I)
-python download_weather_incremental.py --source jma --country JP --start $START --end $END --max-concurrent 10
+python scripts/download_weather_incremental.py --source jma --country JP --start $START --end $END --max-concurrent 10
 ```
 
 ### Performance Expectations
