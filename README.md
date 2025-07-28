@@ -38,10 +38,10 @@ python download_jartic_archives.py --start 2024-01 --end 2024-12
 - **Resolution**: Real-time to hourly measurements
 
 ### 🌤️ [Weather Data](docs/WEATHER.md)
-- **JMA AMeDAS**: 1,286 Japanese weather stations, 10-minute intervals
-- **Open-Meteo**: 0.1° grid resolution, no API limits
-- **ERA5**: 0.25° resolution with atmospheric layers
-- **NASA POWER**: Global coverage, satellite-derived
+- **Open-Meteo**: 0.1° grid resolution, no API limits, historical data
+- **NASA POWER**: Global coverage, satellite-derived, historical data
+- **ERA5**: 0.25° resolution with atmospheric layers (API key required)
+- **JMA AMeDAS**: 1,286 stations, 10-min intervals (recent data only)
 
 ### 🚗 [Traffic Data](docs/TRAFFIC.md)
 - **JARTIC**: Japan Road Traffic Information Center

@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any, AsyncIterator
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 import asyncio
 import aiohttp
@@ -219,58 +219,77 @@ class JMADataSource(DataSource):
             station_id = sensor.location.metadata['station_id']
             param_code = sensor.metadata['parameter_code']
             
+            # Map our parameter codes to AMeDAS field names
+            param_mapping = {
+                'temp': 'temp',
+                'humidity': 'humidity',
+                'pressure': 'pressure',
+                'windSpeed': 'wind',
+                'windDirection': 'windDirection',
+                'precipitation10m': 'precipitation10m',
+                'sun10m': 'sun10m',
+                'visibility': 'visibility',
+                'cloud': None,  # Not available in AMeDAS
+                'dew': None  # Not available in AMeDAS
+            }
+            
+            amedas_field = param_mapping.get(param_code)
+            if amedas_field is None:
+                logger.warning(f"Parameter {param_code} not available in AMeDAS data")
+                return
+            
             current_date = start_date or datetime.now()
             end = end_date or datetime.now()
             
             measurements_count = 0
             
+            # AMeDAS provides data in 10-minute intervals
             while current_date <= end and (not limit or measurements_count < limit):
-                date_str = current_date.strftime('%Y%m%d')
-                hour_str = current_date.strftime('%H')
+                # Round to nearest 10 minutes
+                minutes = (current_date.minute // 10) * 10
+                timestamp_str = current_date.replace(minute=minutes, second=0, microsecond=0).strftime('%Y%m%d%H%M%S')
                 
-                amedas_url = f"{self.base_url}/amedas/data/point/{station_id}/{date_str}_{hour_str}.json"
+                amedas_url = f"{self.base_url}/amedas/data/map/{timestamp_str}.json"
                 
                 try:
                     async with session.get(amedas_url) as response:
                         if response.status == 404:
-                            current_date = current_date.replace(hour=current_date.hour + 1)
+                            current_date = current_date + timedelta(minutes=10)
                             continue
                             
                         if response.status != 200:
                             logger.warning(f"Failed to fetch AMeDAS data: {response.status}")
-                            current_date = current_date.replace(hour=current_date.hour + 1)
+                            current_date = current_date + timedelta(minutes=10)
                             continue
                             
                         data = await response.json()
                         
-                    measurements = []
-                    for time_str, values in data.items():
-                        if param_code in values and values[param_code] is not None:
-                            timestamp = datetime.strptime(f"{date_str} {time_str}", "%Y%m%d %H%M%S")
-                            
-                            measurement = Measurement(
-                                sensor=sensor,
-                                timestamp=timestamp,
-                                value=Decimal(str(values[param_code])),
-                                quality_flag="good" if values.get(f"{param_code}Quality", 0) == 0 else "suspect",
-                                metadata={
-                                    'data_source': 'amedas',
-                                    'observation_type': 'surface'
-                                }
-                            )
-                            measurements.append(measurement)
-                            measurements_count += 1
-                            
-                            if limit and measurements_count >= limit:
-                                break
+                    if station_id in data:
+                        station_data = data[station_id]
+                        if amedas_field in station_data:
+                            value_data = station_data[amedas_field]
+                            if isinstance(value_data, list) and len(value_data) >= 1:
+                                value = value_data[0]
+                                quality = value_data[1] if len(value_data) > 1 else 0
                                 
-                    if measurements:
-                        yield measurements
-                        
+                                measurement = Measurement(
+                                    sensor=sensor,
+                                    timestamp=current_date.replace(minute=minutes, second=0, microsecond=0),
+                                    value=Decimal(str(value)),
+                                    quality_flag="good" if quality == 0 else "suspect",
+                                    metadata={
+                                        'data_source': 'amedas',
+                                        'observation_type': 'surface'
+                                    }
+                                )
+                                
+                                yield [measurement]
+                                measurements_count += 1
+                                
                 except Exception as e:
                     logger.error(f"Error fetching AMeDAS data for {current_date}: {e}")
                     
-                current_date = current_date.replace(hour=current_date.hour + 1)
+                current_date = current_date + timedelta(minutes=10)
                 
         except Exception as e:
             logger.error(f"Error in AMeDAS measurements: {e}")
