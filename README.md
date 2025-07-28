@@ -20,7 +20,7 @@ pip install -r requirements.txt
 cp .env.example .env
 
 # Download air quality data
-python download_air_quality.py --country JP --max-locations 10 --country-wide
+python download_air_quality.py --country JP --max-locations 10 --parallel
 
 # Download weather data
 python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
