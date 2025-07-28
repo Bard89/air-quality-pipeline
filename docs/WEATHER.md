@@ -15,7 +15,8 @@
 # Historical
 python scripts/download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
 
-# Recent only (JMA)
+# Recent only (JMA) - last 3 days  
+# Linux/GNU:
 python scripts/download_weather_incremental.py --source jma --country JP --start $(date -I -d "2 days ago") --end $(date -I)
 ```
 

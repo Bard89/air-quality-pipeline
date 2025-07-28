@@ -77,7 +77,7 @@ Examples:
     if not api_keys:
         single_key = os.getenv('OPENAQ_API_KEY')
         if single_key:
-            api_keys = single_key
+            api_keys = [single_key]  # Always use list for consistency
         else:
             print("Error: No API keys found in .env file")
             print("Please set either OPENAQ_API_KEY or OPENAQ_API_KEY_01, OPENAQ_API_KEY_02, etc.")
