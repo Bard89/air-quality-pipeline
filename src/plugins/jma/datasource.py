@@ -14,7 +14,6 @@ from io import BytesIO
 from ...domain.interfaces import DataSource
 from ...domain.models import Location, Sensor, Measurement, Coordinates, ParameterType, MeasurementUnit
 from ...domain.exceptions import DataSourceError, APIError
-# from ...infrastructure.retry import RetryPolicy, execute_with_retry
 from ...infrastructure.cache import Cache
 from ...infrastructure.metrics import MetricsCollector
 from ...core.api_client import RateLimitedAPIClient
@@ -143,8 +142,8 @@ class JMADataSource(DataSource):
             ParameterType.TEMPERATURE: ('temp', MeasurementUnit.CELSIUS),
             ParameterType.HUMIDITY: ('humidity', MeasurementUnit.PERCENT),
             ParameterType.PRESSURE: ('pressure', MeasurementUnit.HECTOPASCALS),
-            ParameterType.WINDSPEED: ('windSpeed', MeasurementUnit.METERS_PER_SECOND),
-            ParameterType.WINDDIRECTION: ('windDirection', MeasurementUnit.DEGREES),
+            ParameterType.WIND_SPEED: ('windSpeed', MeasurementUnit.METERS_PER_SECOND),
+            ParameterType.WIND_DIRECTION: ('windDirection', MeasurementUnit.DEGREES),
             ParameterType.PRECIPITATION: ('precipitation10m', MeasurementUnit.MILLIMETERS),
             ParameterType.SOLAR_RADIATION: ('sun10m', MeasurementUnit.MINUTES),
             ParameterType.VISIBILITY: ('visibility', MeasurementUnit.METERS),
