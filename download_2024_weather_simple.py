@@ -18,7 +18,7 @@ def download_month(year, month, locations=5, params="temperature,humidity,precip
     print(f"\nDownloading {start} to {end}...")
     
     cmd = [
-        "python", "download_weather_parallel.py",
+        "python", "download_weather_incremental.py",
         "--source", "nasapower",
         "--country", "JP",
         "--max-locations", str(locations),
