@@ -43,6 +43,12 @@ class NASAPowerDataSource(DataSource):
             self._session = aiohttp.ClientSession()
         return self._session
         
+    async def __aenter__(self):
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+    
     async def close(self) -> None:
         if self._session and not self._session.closed:
             await self._session.close()
