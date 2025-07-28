@@ -8,7 +8,7 @@ The traffic module collects vehicle flow data from the Japan Road Traffic Inform
 
 ```bash
 # Step 1: Download archives for 2024
-python download_jartic_archives.py --start 2024-01 --end 2024-12
+python scripts/download_jartic_archives.py --start 2024-01 --end 2024-12
 
 # Step 2: Extract CSV files
 python extract_jartic_csvs.py --all
@@ -31,7 +31,7 @@ python process_extracted_csvs.py --start 2024-01-01 --end 2024-12-31
 ### Step 1: Download Archives
 
 ```bash
-python download_jartic_archives.py --start YYYY-MM --end YYYY-MM [OPTIONS]
+python scripts/download_jartic_archives.py --start YYYY-MM --end YYYY-MM [OPTIONS]
 ```
 
 Options:
@@ -42,10 +42,10 @@ Options:
 Example:
 ```bash
 # Download Q1 2024
-python download_jartic_archives.py --start 2024-01 --end 2024-03
+python scripts/download_jartic_archives.py --start 2024-01 --end 2024-03
 
 # Download full year
-python download_jartic_archives.py --start 2024-01 --end 2024-12
+python scripts/download_jartic_archives.py --start 2024-01 --end 2024-12
 ```
 
 Archives are saved to: `data/jartic/cache/jartic_typeB_YYYY_MM.zip`
@@ -161,7 +161,7 @@ jartic_typeB_YYYY_MM.zip
 ### Monthly Analysis
 ```bash
 # Download and process single month
-python download_jartic_archives.py --start 2024-03 --end 2024-03
+python scripts/download_jartic_archives.py --start 2024-03 --end 2024-03
 python extract_jartic_csvs.py --archive data/jartic/cache/jartic_typeB_2024_03.zip
 python process_extracted_csvs.py --start 2024-03-01 --end 2024-03-31
 ```
@@ -169,7 +169,7 @@ python process_extracted_csvs.py --start 2024-03-01 --end 2024-03-31
 ### Quarterly Reports
 ```bash
 # Q1 2024
-python download_jartic_archives.py --start 2024-01 --end 2024-03
+python scripts/download_jartic_archives.py --start 2024-01 --end 2024-03
 python extract_jartic_csvs.py --all
 python process_extracted_csvs.py --start 2024-01-01 --end 2024-03-31
 ```
@@ -177,7 +177,7 @@ python process_extracted_csvs.py --start 2024-01-01 --end 2024-03-31
 ### Annual Dataset
 ```bash
 # Full year 2024
-python download_jartic_archives.py --start 2024-01 --end 2024-12
+python scripts/download_jartic_archives.py --start 2024-01 --end 2024-12
 python extract_jartic_csvs.py --all
 python process_extracted_csvs.py --start 2024-01-01 --end 2024-12-31
 ```

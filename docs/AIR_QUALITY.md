@@ -8,13 +8,13 @@ The air quality module collects pollution measurements from the OpenAQ platform,
 
 ```bash
 # List available countries
-python download_air_quality.py --list-countries
+python scripts/download_air_quality.py --list-countries
 
 # Download PM2.5 data from Japan (10 locations)
-python download_air_quality.py --country JP --parameters pm25 --max-locations 10 --country-wide
+python scripts/download_air_quality.py --country JP --parameters pm25 --max-locations 10 --country-wide
 
 # Download all parameters with parallel mode (faster with multiple API keys)
-python download_air_quality.py --country IN --country-wide --max-locations 50 --parallel
+python scripts/download_air_quality.py --country IN --country-wide --max-locations 50 --parallel
 ```
 
 ## Data Source: OpenAQ
@@ -56,7 +56,7 @@ python download_air_quality.py --country IN --country-wide --max-locations 50 --
 ## Command Options
 
 ```bash
-python download_air_quality.py [OPTIONS]
+python scripts/download_air_quality.py [OPTIONS]
 ```
 
 - `--country, -c`: Country code (e.g., US, IN, JP, TH)
@@ -99,7 +99,7 @@ datetime,value,sensor_id,location_id,location_name,latitude,longitude,parameter,
 
 ### Convert to Wide Format
 ```bash
-python transform_to_wide.py data/openaq/processed/jp_airquality_all_20241215_123045.csv
+python scripts/transform_to_wide.py data/openaq/processed/jp_airquality_all_20241215_123045.csv
 ```
 
 Wide format has one row per location/hour with parameters as columns.
@@ -110,10 +110,10 @@ Downloads are automatically resumable:
 
 ```bash
 # Start download
-python download_air_quality.py --country IN --country-wide
+python scripts/download_air_quality.py --country IN --country-wide
 
 # If interrupted, resume with same command
-python download_air_quality.py --country IN --country-wide
+python scripts/download_air_quality.py --country IN --country-wide
 # Output: "Resuming from checkpoint (location 150/500)"
 ```
 
@@ -133,22 +133,22 @@ Checkpoint files:
 ### High-Pollution Monitoring
 ```bash
 # Major Asian cities
-python download_air_quality.py --country IN --parameters pm25,pm10 --country-wide --max-locations 100
+python scripts/download_air_quality.py --country IN --parameters pm25,pm10 --country-wide --max-locations 100
 
 # China air quality
-python download_air_quality.py --country CN --country-wide --parallel
+python scripts/download_air_quality.py --country CN --country-wide --parallel
 ```
 
 ### Research Dataset
 ```bash
 # Multi-parameter analysis
-python download_air_quality.py --country JP --parameters pm25,no2,o3,so2 --country-wide
+python scripts/download_air_quality.py --country JP --parameters pm25,no2,o3,so2 --country-wide
 ```
 
 ### Quick Testing
 ```bash
 # Small dataset for development
-python download_air_quality.py --country TH --max-locations 5 --country-wide
+python scripts/download_air_quality.py --country TH --max-locations 5 --country-wide
 ```
 
 ## Troubleshooting
