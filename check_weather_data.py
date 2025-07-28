@@ -56,18 +56,30 @@ if __name__ == "__main__":
     else:
         # Check the most recent file
         try:
-            data_dir = Path("data/nasapower/processed")
-            if not data_dir.exists():
-                print(f"Directory {data_dir} does not exist")
-                return
+            # Check multiple data directories
+            data_dirs = [
+                Path("data/nasapower/processed"),
+                Path("data/openmeteo/processed"),
+                Path("data/jma/processed"),
+                Path("data/era5/processed")
+            ]
             
-            # Match the actual file naming pattern
-            files = list(data_dir.glob("jp_nasapower_weather_*.csv"))
-            if files:
-                latest = max(files, key=lambda p: p.stat().st_mtime)
+            all_files = []
+            for data_dir in data_dirs:
+                if data_dir.exists():
+                    # Match multiple file naming patterns
+                    patterns = ["*_weather_*.csv", "weather_*.csv"]
+                    for pattern in patterns:
+                        all_files.extend(data_dir.glob(pattern))
+            
+            if all_files:
+                latest = max(all_files, key=lambda p: p.stat().st_mtime)
                 check_weather_data(latest)
             else:
-                print("No weather data files found")
+                print("No weather data files found in any data directory")
+                print("Checked directories:")
+                for data_dir in data_dirs:
+                    print(f"  - {data_dir}")
         except PermissionError:
             print("Permission denied accessing the data directory")
         except Exception as e:
