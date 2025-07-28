@@ -11,6 +11,14 @@ class DataSourceException(AirQualityException):
     pass
 
 
+class DataSourceError(DataSourceException):
+    pass
+
+
+class APIError(DataSourceException):
+    pass
+
+
 class RateLimitException(DataSourceException):
     def __init__(self, message: str, retry_after: Optional[int] = None, **kwargs):
         super().__init__(message, kwargs)
