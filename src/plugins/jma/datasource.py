@@ -242,6 +242,13 @@ class JMADataSource(DataSource):
             
             # JMA AMeDAS only provides recent data (last 48-72 hours)
             max_history = datetime.now() - timedelta(days=3)
+            
+            # Convert to naive datetime for comparison if needed
+            if current_date.tzinfo is not None:
+                current_date = current_date.replace(tzinfo=None)
+            if end.tzinfo is not None:
+                end = end.replace(tzinfo=None)
+                
             if current_date < max_history:
                 logger.warning(f"JMA AMeDAS only provides data from {max_history.strftime('%Y-%m-%d')} onwards. Requested date {current_date.strftime('%Y-%m-%d')} is too old.")
                 return
