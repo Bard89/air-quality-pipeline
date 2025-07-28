@@ -51,7 +51,8 @@ async def download_location_data(
     start_date: Optional[datetime],
     end_date: Optional[datetime],
     source: str,
-    semaphore: asyncio.Semaphore
+    semaphore: asyncio.Semaphore,
+    progress_callback=None
 ) -> List[Dict[str, Any]]:
     """Download data for a single location with all parameters"""
     async with semaphore:
@@ -60,35 +61,48 @@ async def download_location_data(
         try:
             sensors = await datasource.get_sensors(location, parameters=parameters)
             
-            for sensor in sensors:
-                try:
-                    async for measurements in datasource.get_measurements(
-                        sensor,
-                        start_date=start_date,
-                        end_date=end_date
-                    ):
-                        for measurement in measurements:
-                            row = {
-                                'timestamp': measurement.timestamp.isoformat(),
-                                'value': float(measurement.value),
-                                'sensor_id': sensor.id,
-                                'location_id': location.id,
-                                'location_name': location.name,
-                                'latitude': float(location.coordinates.latitude),
-                                'longitude': float(location.coordinates.longitude),
-                                'parameter': sensor.parameter.value,
-                                'unit': sensor.unit.value,
-                                'city': location.city or '',
-                                'country': location.country or '',
-                                'data_source': source,
-                                'level': sensor.metadata.get('level', 'surface'),
-                                'quality_flag': measurement.quality_flag or ''
-                            }
-                            all_rows.append(row)
-                            
-                except Exception as e:
-                    logger.error(f"Error fetching {sensor.parameter.value} for {location.name}: {e}")
-                    continue
+            # Split large date ranges into monthly chunks
+            current_start = start_date
+            while current_start < end_date:
+                # Calculate chunk end (max 1 month)
+                next_month = current_start.replace(day=1) + timedelta(days=32)
+                next_month = next_month.replace(day=1)
+                chunk_end = min(next_month - timedelta(days=1), end_date)
+                
+                for sensor in sensors:
+                    try:
+                        async for measurements in datasource.get_measurements(
+                            sensor,
+                            start_date=current_start,
+                            end_date=chunk_end
+                        ):
+                            for measurement in measurements:
+                                row = {
+                                    'timestamp': measurement.timestamp.isoformat(),
+                                    'value': float(measurement.value),
+                                    'sensor_id': sensor.id,
+                                    'location_id': location.id,
+                                    'location_name': location.name,
+                                    'latitude': float(location.coordinates.latitude),
+                                    'longitude': float(location.coordinates.longitude),
+                                    'parameter': sensor.parameter.value,
+                                    'unit': sensor.unit.value,
+                                    'city': location.city or '',
+                                    'country': location.country or '',
+                                    'data_source': source,
+                                    'level': sensor.metadata.get('level', 'surface'),
+                                    'quality_flag': measurement.quality_flag or ''
+                                }
+                                all_rows.append(row)
+                                
+                    except Exception as e:
+                        logger.warning(f"Error fetching {sensor.parameter.value} for {location.name} ({current_start} to {chunk_end}): {e}")
+                        continue
+                
+                if progress_callback:
+                    progress_callback(location.name, current_start, chunk_end)
+                    
+                current_start = chunk_end + timedelta(days=1)
                     
         except Exception as e:
             logger.error(f"Error processing location {location.name}: {e}")
@@ -141,8 +155,16 @@ async def download_weather_data_parallel(
         output_dir = output_dir or Path(f"data/{source}/processed")
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        output_file = output_dir / f"{country.lower()}_{source}_weather_parallel_{timestamp}.csv"
+        # Create filename with date range
+        if start_date and end_date:
+            date_start = start_date.strftime("%Y%m%d")
+            date_end = end_date.strftime("%Y%m%d")
+            filename = f"{country.lower()}_{source}_weather_{date_start}_to_{date_end}.csv"
+        else:
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            filename = f"{country.lower()}_{source}_weather_{timestamp}.csv"
+        
+        output_file = output_dir / filename
         
         # Write headers
         with open(output_file, 'w', newline='', encoding='utf-8') as f:
@@ -161,24 +183,55 @@ async def download_weather_data_parallel(
         start_time = time.time()
         tasks = []
         
+        # Calculate total months to process
+        total_months = 1
+        if start_date and end_date:
+            total_months = (end_date.year - start_date.year) * 12 + end_date.month - start_date.month + 1
+            logger.info(f"Date range spans {total_months} months")
+        
         logger.info(f"Starting parallel download with {max_concurrent} concurrent requests...")
+        logger.info(f"Processing {len(locations)} locations x {len(param_types)} parameters")
+        
+        # Progress tracking
+        completed_chunks = 0
+        total_chunks = len(locations) * total_months
+        
+        def progress_callback(location_name, chunk_start, chunk_end):
+            nonlocal completed_chunks
+            completed_chunks += 1
+            logger.debug(f"Completed {location_name} for {chunk_start.strftime('%Y-%m')}")
         
         for i, location in enumerate(locations):
             # Use round-robin to distribute locations across datasource instances
             ds = datasources[i % len(datasources)]
             task = download_location_data(
-                ds, location, param_types, start_date, end_date, source, semaphore
+                ds, location, param_types, start_date, end_date, source, semaphore, progress_callback
             )
-            tasks.append(task)
+            tasks.append((location.name, task))
         
         # Process tasks with progress bar
         if TQDM_AVAILABLE:
             results = []
-            for f in atqdm.as_completed(tasks, desc="Downloading locations", unit="loc"):
-                result = await f
-                results.append(result)
+            with tqdm(total=len(tasks), desc="Downloading locations", unit="loc") as pbar:
+                for name, task in tasks:
+                    pbar.set_description(f"Processing {name[:20]}")
+                    try:
+                        result = await task
+                        results.append(result)
+                    except Exception as e:
+                        logger.error(f"Failed to download {name}: {e}")
+                        results.append([])
+                    pbar.update(1)
         else:
-            results = await asyncio.gather(*tasks)
+            results = []
+            for i, (name, task) in enumerate(tasks):
+                logger.info(f"Processing location {i+1}/{len(tasks)}: {name}")
+                try:
+                    result = await task
+                    results.append(result)
+                except Exception as e:
+                    logger.error(f"Failed to download {name}: {e}")
+                    results.append([])
         
         # Write all results to CSV
         total_measurements = 0
