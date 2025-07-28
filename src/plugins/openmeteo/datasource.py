@@ -22,10 +22,10 @@ class OpenMeteoDataSource(DataSource):
         api_client: Optional[RateLimitedAPIClient] = None,
         cache: Optional[Cache] = None,
         metrics: Optional[MetricsCollector] = None,
-        base_url: str = "https://api.open-meteo.com/v1"
+        base_url: str = "https://archive-api.open-meteo.com"
     ):
         self.base_url = base_url
-        self.api_client = api_client or RateLimitedAPIClient(base_url=self.base_url, rate_limit=10000)
+        self.api_client = api_client or RateLimitedAPIClient(base_url=self.base_url, requests_per_minute=10000)
         self.cache = cache
         self.metrics = metrics
         self._session: Optional[aiohttp.ClientSession] = None
@@ -207,7 +207,7 @@ class OpenMeteoDataSource(DataSource):
                     'timezone': 'Asia/Tokyo'
                 }
                 
-                url = f"{self.base_url}/archive"
+                url = f"{self.base_url}/v1/archive"
                 
                 async with session.get(url, params=params) as response:
                     if response.status != 200:
@@ -308,7 +308,7 @@ class OpenMeteoDataSource(DataSource):
     async def health_check(self) -> Dict[str, Any]:
         try:
             session = await self._get_session()
-            test_url = f"{self.base_url}/archive"
+            test_url = f"{self.base_url}/v1/archive"
             params = {
                 'latitude': 35.6762,
                 'longitude': 139.6503,
