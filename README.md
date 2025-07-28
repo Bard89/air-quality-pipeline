@@ -33,9 +33,9 @@ python download_jartic_archives.py --start 2024-01 --end 2024-12
 
 ### 📊 [Air Quality Data](docs/AIR_QUALITY.md)
 - **OpenAQ**: Global network with 100+ parameters
-- **Coverage**: 100+ countries, thousands of monitoring stations
-- **Parameters**: PM2.5, PM10, NO2, O3, CO, SO2, and more
-- **Resolution**: Real-time to hourly measurements
+  - Coverage: 100+ countries, thousands of monitoring stations
+  - Parameters: PM2.5, PM10, NO2, O3, CO, SO2, and more
+  - Resolution: Real-time to hourly measurements
 
 ### 🌤️ [Weather Data](docs/WEATHER.md)
 - **Open-Meteo**: 0.1° grid resolution, no API limits, historical data
@@ -45,9 +45,9 @@ python download_jartic_archives.py --start 2024-01 --end 2024-12
 
 ### 🚗 [Traffic Data](docs/TRAFFIC.md)
 - **JARTIC**: Japan Road Traffic Information Center
-- **Coverage**: ~2,600 monitoring locations across Japan
-- **Resolution**: 5-minute intervals
-- **Parameters**: Vehicle counts, speeds, congestion levels
+  - Coverage: ~2,600 monitoring locations across Japan
+  - Resolution: 5-minute intervals
+  - Parameters: Vehicle counts, speeds, congestion levels
 
 ## Architecture
 
