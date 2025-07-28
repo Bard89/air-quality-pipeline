@@ -14,26 +14,27 @@ python check_weather_data.py
 python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
 
 # Download recent data from JMA (last 3 days only)
-python download_weather_incremental.py --source jma --country JP --start 2025-07-26 --end 2025-07-28
+python download_weather_incremental.py --source jma --country JP --start [recent-date] --end [today]
 
 # Download from NASA POWER (slower but reliable)
 python download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-01-31 --max-locations 15
 
-# Parallel download for full year (all sources)
-# Open-Meteo
-python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-12-31 --max-concurrent 10 &
-# NASA POWER
-python download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-12-31 --max-concurrent 10 &
+# Download full year data
+# Open-Meteo (recommended - fastest for historical data)
+python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-12-31 --max-concurrent 10
+
+# NASA POWER (slower but reliable alternative)
+python download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-12-31 --max-concurrent 10
 ```
 
 ## Data Sources Comparison
 
 ### 🌡️ JMA AMeDAS (Most Granular - Recent Data Only)
-- **Stations**: 1,358 weather stations across Japan
+- **Stations**: 1,300+ weather stations across Japan
 - **Temporal**: 10-minute intervals (highest resolution)
 - **Type**: Actual ground measurements
 - **API Key**: Not required
-- **Limitation**: Only provides recent data (last 3 days)
+- **Limitation**: Only provides recent data (last 3 days) - no historical archive
 - **Best for**: Real-time monitoring, current conditions
 - **Speed**: Fast for recent data
 
@@ -158,7 +159,7 @@ python download_weather_incremental.py --source era5 --country JP --start 2024-0
 ### Download Full Year
 ```bash
 # Downloads 2024 weather data month by month
-./download_2024_weather_fast.sh
+./download_2024_weather_fast.sh  # Uses download_weather_incremental.py internally
 ```
 
 ## Common Use Cases
@@ -192,7 +193,7 @@ python download_weather_incremental.py --source openmeteo --country JP --start 2
 python download_weather_incremental.py --source nasapower --country JP --start 2024-01-01 --end 2024-01-31 --max-concurrent 10 &
 
 # JMA - Recent data only (specify dates within last 3 days)
-python download_weather_incremental.py --source jma --country JP --start 2025-07-26 --end 2025-07-28 --max-concurrent 10 &
+python download_weather_incremental.py --source jma --country JP --start [recent-date] --end [today] --max-concurrent 10
 ```
 
 ### Performance Expectations
@@ -211,14 +212,15 @@ python download_weather_incremental.py --source jma --country JP --start 2025-07
 ## Troubleshooting
 
 ### JMA Returns No Data
-- JMA only provides last 3 days of data
+- JMA AMeDAS only provides last 3 days of data - this is an API limitation
 - Always use dates within 3 days of today
-- For historical data, use Open-Meteo or NASA POWER
+- For historical Japanese weather data, use Open-Meteo (recommended) or NASA POWER
 
 ### Memory Issues
-- Use `download_weather_incremental.py` (not the parallel version)
-- Data is written in batches of 1,000 rows
+- Always use `download_weather_incremental.py` for large datasets
+- Data is written in batches of 1,000 rows to prevent memory issues
 - Monitor file growth with `watch -n 5 'ls -lh data/*/processed/'`
+- Fixed CSV escaping and resource management in latest version
 
 ### Slow Downloads
 - NASA POWER is inherently slow (~45s/location)

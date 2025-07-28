@@ -20,9 +20,9 @@ pip install -r requirements.txt
 cp .env.example .env
 
 # Download air quality data
-python download_air_quality.py --country JP --max-locations 10 --parallel
+python download_air_quality.py --country JP --max-locations 10 --country-wide
 
-# Download weather data (use incremental version for large datasets)
+# Download weather data
 python download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
 
 # Download traffic data
@@ -41,7 +41,7 @@ python download_jartic_archives.py --start 2024-01 --end 2024-12
 - **Open-Meteo**: 0.1° grid resolution, no API limits, historical data
 - **NASA POWER**: Global coverage, satellite-derived, historical data
 - **ERA5**: 0.25° resolution with atmospheric layers (API key required)
-- **JMA AMeDAS**: 1,286 stations, 10-min intervals (recent data only)
+- **JMA AMeDAS**: 1,300+ stations, 10-min intervals (last 3 days only)
 
 ### 🚗 [Traffic Data](docs/TRAFFIC.md)
 - **JARTIC**: Japan Road Traffic Information Center
@@ -66,7 +66,7 @@ src/
 
 ## Key Features
 
-- **Parallel Downloads**: Multi-threaded/async for high performance
+- **Incremental Downloads**: Progressive writing for large datasets
 - **Checkpoint/Resume**: Automatic recovery from interruptions
 - **Plugin Architecture**: Easy to add new data sources
 - **Data Validation**: Automatic quality checks
@@ -87,11 +87,3 @@ src/
 - [Traffic Data Guide](docs/TRAFFIC.md)
 - [Architecture Overview](ARCHITECTURE.md)
 - [API Documentation](docs/API.md)
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
-
-## License
-
-MIT License - see [LICENSE](LICENSE) for details.

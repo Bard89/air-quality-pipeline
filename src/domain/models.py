@@ -26,7 +26,7 @@ class ParameterType(str, Enum):
     VISIBILITY = "visibility"
     CLOUD_COVER = "cloud_cover"
     DEW_POINT = "dew_point"
-    HUMIDITY = "humidity"
+    HUMIDITY = "humidity"  # Keep for backward compatibility
     # Traffic parameters
     TRAFFIC_VOLUME = "traffic_volume"
     VEHICLE_SPEED = "vehicle_speed"
