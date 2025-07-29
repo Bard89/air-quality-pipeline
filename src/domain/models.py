@@ -37,6 +37,8 @@ class ParameterType(str, Enum):
     FIRE_RADIATIVE_POWER = "fire_radiative_power"
     FIRE_CONFIDENCE = "fire_confidence"
     FIRE_BRIGHTNESS = "fire_brightness"
+    # Atmospheric parameters
+    BOUNDARY_LAYER_HEIGHT = "boundary_layer_height"
 
 
 class MeasurementUnit(str, Enum):
