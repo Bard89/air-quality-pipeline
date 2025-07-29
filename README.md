@@ -54,11 +54,6 @@ python scripts/download_era5_pbl.py --country JP --start 2024-01-01 --end 2024-0
 | **Urban Form** | ✗ No | Static | One-time analysis |
 | **Natural Sources** (Dust) | ✓ Yes | 6 hours | Forecast only |
 
-### Real-time Data Strategy
-- **Real-time sources** (latency <6 hours): Critical for nowcasting and alerts
-- **Delayed sources** (latency >1 day): Valuable for model training and reanalysis
-- **Combined approach**: Real-time for operations, delayed for accuracy improvement
-
 *JMA: 10-min for precipitation products, hourly for other parameters
 **FIRMS: <60 seconds for US/Canada, 30 min for geostationary satellites, 3 hours global
 
