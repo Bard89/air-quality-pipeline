@@ -7,6 +7,7 @@ import cdsapi
 import os
 from datetime import datetime, timedelta
 import argparse
+import calendar
 
 def download_era5_pbl(year, month, output_dir):
     """Download ERA5 PBL height for a specific month"""
@@ -23,6 +24,9 @@ def download_era5_pbl(year, month, output_dir):
     
     print(f"Downloading ERA5 PBL for {year}-{month:02d}...")
     
+    # Get the correct number of days for this month
+    _, num_days = calendar.monthrange(year, month)
+    
     # Request parameters
     request = {
         'product_type': 'reanalysis',
@@ -30,7 +34,7 @@ def download_era5_pbl(year, month, output_dir):
         'variable': 'boundary_layer_height',
         'year': str(year),
         'month': f'{month:02d}',
-        'day': [f'{d:02d}' for d in range(1, 32)],  # All days
+        'day': [f'{d:02d}' for d in range(1, num_days + 1)],  # Correct days for month
         'time': [f'{h:02d}:00' for h in range(24)],  # All hours
         'area': [46, 122, 24, 146],  # Japan: North, West, South, East
     }

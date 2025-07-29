@@ -23,7 +23,8 @@ async def download_era5_pbl(
     country_code: str,
     start_date: datetime,
     end_date: datetime,
-    output_dir: Optional[str] = None
+    output_dir: Optional[str] = None,
+    args = None
 ):
     load_dotenv()
     
@@ -47,7 +48,7 @@ async def download_era5_pbl(
         print(f"Mode: {'Real data' if cds_api_key else 'Demo data'}")
         
         # Get locations for country
-        locations = await datasource.get_locations(country=country_code, limit=5)
+        locations = await datasource.get_locations(country=country_code, limit=args.location_limit)
         if not locations:
             print(f"Country {country_code} not supported")
             return None
@@ -166,6 +167,8 @@ Note: Real data requires CDS API key. Without it, demo data will be generated.
                        help='End date (YYYY-MM-DD)')
     parser.add_argument('--output-dir', '-o', type=str,
                        help='Output directory (default: data/era5/processed/)')
+    parser.add_argument('--location-limit', '-l', type=int, default=5,
+                       help='Maximum number of grid points to process (default: 5)')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging')
     
@@ -191,7 +194,8 @@ Note: Real data requires CDS API key. Without it, demo data will be generated.
         args.country.upper(),
         args.start,
         args.end,
-        args.output_dir
+        args.output_dir,
+        args
     ))
 
 

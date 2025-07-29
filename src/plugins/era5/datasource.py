@@ -313,6 +313,7 @@ class ERA5DataSource(DataSource):
             f.write(f"key: {cds_key}\n")
             temp_rc = f.name
             
+        old_rc = None
         try:
             # Set environment variable to use our temp file
             old_rc = os.environ.get('CDSAPI_RC')
@@ -371,9 +372,25 @@ class ERA5DataSource(DataSource):
                 
                 # Download data for this month
                 with tempfile.NamedTemporaryFile(suffix='.nc', delete=False) as tmp:
+                    ds = None
                     try:
                         logger.info(f"Downloading ERA5 {era5_param} for {year}-{month:02d}...")
-                        result = client.retrieve(data_type, request, tmp.name)
+                        
+                        # Retry logic with exponential backoff
+                        max_retries = 3
+                        retry_delay = 5
+                        
+                        for attempt in range(max_retries):
+                            try:
+                                result = client.retrieve(data_type, request, tmp.name)
+                                break  # Success, exit retry loop
+                            except Exception as e:
+                                if attempt < max_retries - 1:
+                                    logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {retry_delay}s...")
+                                    await asyncio.sleep(retry_delay)
+                                    retry_delay *= 2  # Exponential backoff
+                                else:
+                                    raise  # Final attempt failed
                         
                         # Load data with xarray
                         ds = xr.open_dataset(tmp.name)
@@ -441,7 +458,7 @@ class ERA5DataSource(DataSource):
                         if os.path.exists(tmp.name):
                             os.unlink(tmp.name)
                         # Close dataset
-                        if 'ds' in locals():
+                        if ds is not None:
                             ds.close()
                 
         except Exception as e:
@@ -454,7 +471,10 @@ class ERA5DataSource(DataSource):
                 os.environ['CDSAPI_RC'] = old_rc
             else:
                 os.environ.pop('CDSAPI_RC', None)
-            os.unlink(temp_rc)
+            try:
+                os.unlink(temp_rc)
+            except FileNotFoundError:
+                pass
         
     async def list_countries(self) -> List[Dict[str, str]]:
         return [

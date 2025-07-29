@@ -68,9 +68,12 @@ CDS_API_KEY=YOUR_UID:YOUR_API_KEY
 Or create `~/.cdsapirc`:
 ```bash
 cat > ~/.cdsapirc << EOF
-url: https://cds.climate.copernicus.eu/api
+url: https://cds.climate.copernicus.eu/api/v2
 key: YOUR_UID:YOUR_API_KEY
 EOF
+
+# Secure the file with restricted permissions
+chmod 600 ~/.cdsapirc
 ```
 
 ### 3. Download Historical Data
