@@ -33,6 +33,10 @@ class ParameterType(str, Enum):
     OCCUPANCY_RATE = "occupancy_rate"
     # Transit proxy parameters
     TRANSIT_RIDERSHIP = "transit_ridership"
+    # Fire detection parameters
+    FIRE_RADIATIVE_POWER = "fire_radiative_power"
+    FIRE_CONFIDENCE = "fire_confidence"
+    FIRE_BRIGHTNESS = "fire_brightness"
 
 
 class MeasurementUnit(str, Enum):
@@ -56,6 +60,10 @@ class MeasurementUnit(str, Enum):
     KILOMETERS_PER_HOUR = "km/h"
     PERCENT_OCCUPANCY = "%occupancy"
     PASSENGERS_PER_HOUR = "passengers/hour"
+    # Fire measurement units
+    MEGAWATTS = "MW"
+    KELVIN = "K"
+    CONFIDENCE_PERCENT = "confidence_%"
 
 
 @dataclass(frozen=True)
@@ -134,4 +142,17 @@ class DownloadJob:
     end_date: Optional[datetime] = None
     created_at: datetime = field(default_factory=datetime.utcnow)
     status: str = "pending"
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class FireEvent:
+    id: str
+    location: Coordinates
+    detection_time: datetime
+    fire_radiative_power: Decimal
+    confidence: int
+    satellite: str  # MODIS or VIIRS
+    brightness_temperature: Decimal
+    scan_area: Optional[Decimal] = None  # Area of fire pixel in km²
     metadata: Dict[str, Any] = field(default_factory=dict)
