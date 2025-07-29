@@ -31,21 +31,36 @@ python scripts/download_era5_pbl.py --country JP --start 2024-01-01 --end 2024-0
 ## Data Sources
 
 ### Implemented
-- **Air Quality**: OpenAQ
-- **Weather**: Open-Meteo, NASA POWER, ERA5, JMA
-- **Traffic**: JARTIC (Japan only)
-- **Fire Detection**: NASA FIRMS (real-time satellite fire data)
-- **Atmospheric**: ERA5 PBL height (planetary boundary layer)
+| Source | Real-time | Latency | Historical |
+|--------|-----------|---------|------------|
+| **Air Quality** (OpenAQ) | ✓ Yes | Seconds-minutes | 2016-present |
+| **Weather** (Open-Meteo) | ✓ Yes | <1 hour | 1940-present |
+| **Weather** (NASA POWER) | ✗ No | 2-3 days | 1984-present |
+| **Weather** (JMA) | ✓ Yes | 10 min* | Last 3 days only |
+| **Weather** (ERA5) | ✗ No | 5 days | 1940-present |
+| **Traffic** (JARTIC) | ✓ Yes | 5 min | 2019-present |
+| **Fire Detection** (FIRMS) | ✓ Yes | 3 hours** | Last 2 months |
+| **Atmospheric** (ERA5 PBL) | ✗ No | 5 days | 1940-present |
 
 ### Planned Enhancements
-- **Transport Monitoring**: Upwind station tracking (500-1500km)
-- **Terrain Analysis**: SRTM/ASTER elevation, valley detection
-- **Trajectory Analysis**: HYSPLIT backward trajectories
-- **Chemical Transport**: CAMS reanalysis (PM2.5, NO2, SO2)
-- **Satellite Data**: Sentinel-5P TROPOMI (NO2, SO2, CO)
-- **Industrial Emissions**: CEMS data (China/India)
-- **Urban Form**: Street canyon effects, building data
-- **Natural Sources**: Dust storm forecasts
+| Source | Real-time | Latency | Coverage |
+|--------|-----------|---------|----------|
+| **Upwind Monitoring** | ✓ Yes | 1-3 hours | Via OpenAQ |
+| **Terrain Analysis** | ✗ No | Static | One-time calculation |
+| **HYSPLIT Trajectories** | ✓ Yes | 6 hours | 96-hour backward |
+| **CAMS Chemical Transport** | ✗ No | 3-5 days | 2003-present |
+| **Sentinel-5P Satellite** | ✗ No | 3-5 days | 2018-present |
+| **Industrial Emissions** (CEMS) | ✓ Yes | 1 hour | China/India |
+| **Urban Form** | ✗ No | Static | One-time analysis |
+| **Natural Sources** (Dust) | ✓ Yes | 6 hours | Forecast only |
+
+### Real-time Data Strategy
+- **Real-time sources** (latency <6 hours): Critical for nowcasting and alerts
+- **Delayed sources** (latency >1 day): Valuable for model training and reanalysis
+- **Combined approach**: Real-time for operations, delayed for accuracy improvement
+
+*JMA: 10-min for precipitation products, hourly for other parameters
+**FIRMS: <60 seconds for US/Canada, 30 min for geostationary satellites, 3 hours global
 
 ## Docs
 
