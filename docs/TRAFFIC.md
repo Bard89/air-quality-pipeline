@@ -2,6 +2,15 @@
 
 JARTIC archives. Japan only.
 
+## Why This Data Source?
+
+Traffic is a major urban pollution source, especially during rush hours:
+- **Direct emissions**: Vehicles emit NO2, PM2.5, CO directly
+- **Morning peak problem**: Rush hour emissions + low morning PBL = 2-3x higher concentrations
+- **Congestion correlation**: Traffic speed inversely correlates with emissions
+- **Weekend effect**: 20-40% lower NO2 on weekends proves traffic impact
+- **Hyperlocal**: Traffic explains street-level pollution variations
+
 ## Coverage
 - ~2,600 locations across Japan
 - 5-minute intervals

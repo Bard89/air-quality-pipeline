@@ -1,5 +1,14 @@
 # ERA5 Planetary Boundary Layer Height
 
+## Why This Data Source?
+
+PBL height is the invisible ceiling that controls pollution concentration:
+- **Morning rush crisis**: Low PBL (200m) + traffic emissions = severe pollution
+- **Inversion prediction**: Shallow PBL indicates temperature inversions trapping pollution
+- **Ventilation capacity**: PBL × wind speed = atmosphere's ability to flush pollution
+- **2-5x multiplier**: Low PBL can amplify ground pollution by 2-5x
+- **Diurnal cycle**: Explains why pollution peaks at 8am and clears by 3pm
+
 ## What is PBL Height?
 
 The Planetary Boundary Layer (PBL) is the lowest part of the atmosphere that is directly influenced by Earth's surface. Its height determines the vertical space available for pollution mixing.

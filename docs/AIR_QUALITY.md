@@ -2,6 +2,14 @@
 
 OpenAQ API v3. Downloads ALL historical data (ignores date filters).
 
+## Why This Data Source?
+
+Ground truth measurements from government monitoring stations. OpenAQ provides:
+- **Accurate baseline**: Regulatory-grade PM2.5, NO2, O3 measurements
+- **Historical context**: Multi-year data reveals seasonal patterns
+- **Model validation**: Essential for training and validating prediction models
+- **Limitation**: Sparse coverage (cities only), making other data sources critical for full coverage
+
 ## Coverage
 - 100+ countries, 15,000+ locations
 - Historical from ~2016 (varies by station)

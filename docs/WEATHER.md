@@ -1,5 +1,14 @@
 # Weather
 
+## Why This Data Source?
+
+Weather is the primary driver of pollution dispersion. Critical factors:
+- **Wind**: Horizontal transport and dilution (>5 m/s clears pollution)
+- **Rain**: Wet deposition removes PM2.5 (10mm rain reduces PM by 30-50%)
+- **Temperature**: Drives chemical reactions and inversions
+- **Pressure**: High pressure = stagnant air = pollution accumulation
+- **Combined impact**: Weather explains 40-60% of day-to-day pollution variability
+
 ## Sources
 
 | Source | Coverage | History | Resolution | Notes |

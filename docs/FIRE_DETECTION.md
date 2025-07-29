@@ -2,6 +2,15 @@
 
 Real-time and historical satellite fire detection data.
 
+## Why This Data Source?
+
+Fires cause extreme pollution events that models miss without real-time detection:
+- **Sudden spikes**: PM2.5 can increase 10x within hours from fires
+- **Regional impact**: Smoke travels 100-1000km affecting downwind cities
+- **Seasonal patterns**: Agricultural burning seasons drive pollution episodes
+- **Attribution**: Distinguishes natural (wildfire) vs anthropogenic (crop burning) sources
+- **Early warning**: 3-hour satellite updates enable pollution alerts
+
 ## Coverage
 
 - **Countries**: JP, KR, CN, IN, TH, ID, MY, VN
