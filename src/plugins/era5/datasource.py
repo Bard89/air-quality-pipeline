@@ -8,6 +8,7 @@ from pathlib import Path
 import os
 import tempfile
 import numpy as np
+import pandas as pd
 
 from ...domain.interfaces import DataSource
 from ...domain.models import Location, Sensor, Measurement, Coordinates, ParameterType, MeasurementUnit
@@ -29,7 +30,7 @@ class ERA5DataSource(DataSource):
         metrics: Optional[MetricsCollector] = None,
         retry_policy: Optional[Any] = None,
         cds_api_key: Optional[str] = None,
-        cds_api_url: str = "https://cds.climate.copernicus.eu/api/v2"
+        cds_api_url: str = "https://cds.climate.copernicus.eu/api"
     ):
         self.cds_api_key = cds_api_key or os.environ.get('CDS_API_KEY')
         self.cds_api_url = cds_api_url
@@ -160,6 +161,10 @@ class ERA5DataSource(DataSource):
             ParameterType.DEW_POINT: {
                 'single_level': '2m_dewpoint_temperature',
                 'unit': MeasurementUnit.CELSIUS
+            },
+            ParameterType.BOUNDARY_LAYER_HEIGHT: {
+                'single_level': 'boundary_layer_height',
+                'unit': MeasurementUnit.METERS
             }
         }
         
@@ -242,7 +247,8 @@ class ERA5DataSource(DataSource):
             ParameterType.SOLAR_RADIATION: (0.0, 800.0),
             ParameterType.CLOUD_COVER: (0.0, 100.0),
             ParameterType.VISIBILITY: (1000.0, 10000.0),
-            ParameterType.DEW_POINT: (5.0, 20.0)
+            ParameterType.DEW_POINT: (5.0, 20.0),
+            ParameterType.BOUNDARY_LAYER_HEIGHT: (200.0, 2000.0)  # PBL typically 200-2000m
         }
         
         param_type = sensor.parameter
@@ -286,22 +292,169 @@ class ERA5DataSource(DataSource):
         limit: Optional[int] = None
     ) -> AsyncIterator[List[Measurement]]:
         """
-        Placeholder implementation for ERA5 data fetching.
-        
-        This method requires the cdsapi package to be installed and configured
-        with valid CDS API credentials. Actual implementation pending.
-        
-        To use ERA5 data:
-        1. Install cdsapi: pip install cdsapi
-        2. Register at https://cds.climate.copernicus.eu/
-        3. Configure credentials in ~/.cdsapirc or CDSAPI_KEY environment variable
+        Fetch ERA5 data using CDS API
         """
-        logger.info(f"ERA5 data download requires cdsapi Python package")
-        logger.info(f"Install: pip install cdsapi")
-        logger.info(f"Configure: Create ~/.cdsapirc with your CDS credentials")
-        logger.info(f"Documentation: https://cds.climate.copernicus.eu/api-how-to")
+        try:
+            import cdsapi
+            import xarray as xr
+        except ImportError:
+            logger.error("cdsapi and xarray required for ERA5 data. Install with: pip install cdsapi xarray")
+            yield []
+            return
+            
+        # Setup CDS client
+        cds_url = self.cds_api_url
+        cds_key = self.cds_api_key
         
-        yield []
+        # Create temporary .cdsapirc for this session
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cdsapirc', delete=False) as f:
+            f.write(f"url: {cds_url}\n")
+            f.write(f"key: {cds_key}\n")
+            temp_rc = f.name
+            
+        try:
+            # Set environment variable to use our temp file
+            old_rc = os.environ.get('CDSAPI_RC')
+            os.environ['CDSAPI_RC'] = temp_rc
+            
+            client = cdsapi.Client()
+            
+            # Get ERA5 parameter from sensor metadata
+            era5_param = sensor.metadata.get('era5_parameter', 'boundary_layer_height')
+            data_type = sensor.metadata.get('data_type', 'reanalysis-era5-single-levels')
+            
+            # Prepare time range
+            if not start_date:
+                start_date = datetime.now() - timedelta(days=7)
+            if not end_date:
+                end_date = datetime.now()
+                
+            # ERA5 is typically 5 days behind real-time
+            if end_date > datetime.now() - timedelta(days=5):
+                end_date = datetime.now() - timedelta(days=5)
+                logger.info(f"Adjusted end date to {end_date} (ERA5 has 5-day lag)")
+                
+            # Get location coordinates
+            lat = float(sensor.location.coordinates.latitude)
+            lon = float(sensor.location.coordinates.longitude)
+            
+            # Define area [North, West, South, East]
+            area = [lat + 0.25, lon - 0.25, lat - 0.25, lon + 0.25]
+            
+            # Generate date range
+            date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+            
+            # Group by year-month for efficient requests
+            year_months = {}
+            for date in date_range:
+                key = (date.year, date.month)
+                if key not in year_months:
+                    year_months[key] = []
+                year_months[key].append(date.day)
+                
+            # Process each month separately to avoid large downloads
+            for (year, month), days in year_months.items():
+                logger.info(f"Fetching ERA5 data for {year}-{month:02d}")
+                
+                # Prepare request for this month
+                request = {
+                    'product_type': 'reanalysis',
+                    'format': 'netcdf',
+                    'variable': era5_param,
+                    'year': str(year),
+                    'month': f"{month:02d}",
+                    'day': [f"{d:02d}" for d in sorted(set(days))],
+                    'time': [f"{h:02d}:00" for h in range(24)],
+                    'area': area,
+                }
+                
+                # Download data for this month
+                with tempfile.NamedTemporaryFile(suffix='.nc', delete=False) as tmp:
+                    try:
+                        logger.info(f"Downloading ERA5 {era5_param} for {year}-{month:02d}...")
+                        result = client.retrieve(data_type, request, tmp.name)
+                        
+                        # Load data with xarray
+                        ds = xr.open_dataset(tmp.name)
+                        
+                        # Get the variable name (CDS uses different names than parameters)
+                        var_names = list(ds.data_vars)
+                        if not var_names:
+                            logger.warning(f"No data variables found in ERA5 response for {year}-{month:02d}")
+                            continue
+                            
+                        var_name = var_names[0]
+                        data_array = ds[var_name]
+                        
+                        # Convert to measurements
+                        times = pd.to_datetime(data_array.time.values)
+                        values = data_array.values
+                        
+                        measurements = []
+                        for i, time in enumerate(times):
+                            # Skip if outside requested range
+                            if time < start_date or time > end_date:
+                                continue
+                                
+                            # Get value (may need to extract from grid)
+                            if len(values.shape) == 3:  # time, lat, lon
+                                value = float(values[i, 0, 0])
+                            elif len(values.shape) == 1:  # time only
+                                value = float(values[i])
+                            else:
+                                value = float(values[i].mean())
+                                
+                            # Convert units if needed
+                            if sensor.parameter == ParameterType.TEMPERATURE:
+                                value = value - 273.15  # K to C
+                            elif sensor.parameter == ParameterType.PRESSURE:
+                                value = value / 100  # Pa to hPa
+                                
+                            measurement = Measurement(
+                                sensor=sensor,
+                                timestamp=time.to_pydatetime(),
+                                value=Decimal(str(round(value, 2))),
+                                quality_flag="good",
+                                metadata={
+                                    'data_source': 'era5',
+                                    'parameter': era5_param
+                                }
+                            )
+                            measurements.append(measurement)
+                            
+                            # Yield in batches
+                            if len(measurements) >= 100:
+                                yield measurements
+                                measurements = []
+                                
+                            if limit and len(measurements) >= limit:
+                                yield measurements
+                                return
+                                
+                        # Yield remaining measurements
+                        if measurements:
+                            yield measurements
+                            
+                    finally:
+                        # Cleanup temp file
+                        if os.path.exists(tmp.name):
+                            os.unlink(tmp.name)
+                        # Close dataset
+                        if 'ds' in locals():
+                            ds.close()
+                
+        except Exception as e:
+            logger.error(f"Error fetching ERA5 data: {e}")
+            yield []
+            
+        finally:
+            # Restore environment and cleanup
+            if old_rc:
+                os.environ['CDSAPI_RC'] = old_rc
+            else:
+                os.environ.pop('CDSAPI_RC', None)
+            os.unlink(temp_rc)
         
     async def list_countries(self) -> List[Dict[str, str]]:
         return [
