@@ -1,6 +1,6 @@
-# Environmental Data Collector
+# Environmental data Collector
 
-Downloads air quality, weather, and traffic data.
+Downloads air quality, weather, traffic and other related data.
 
 ## Setup
 
