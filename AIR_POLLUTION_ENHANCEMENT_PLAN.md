@@ -263,3 +263,84 @@ earthengine-api>=0.1  # Google Earth Engine
 - [ ] Terrain effects quantified for all stations
 
 This comprehensive enhancement plan transforms the air quality monitoring system into a state-of-the-art prediction platform capable of protecting public health through accurate, timely forecasts.
+
+## Parallel Worker Plan
+
+### Worker 1: Terrain & Local Effects
+**Focus**: Ground-based analysis, topography, and local pollution factors
+
+**Tasks**:
+1. **Terrain Analysis Module** [CRITICAL]
+   - Create `src/plugins/terrain/` plugin
+   - Implement elevation fetching, TRI, valley depth, sky view factor
+   - One-time calculation for all monitoring stations
+
+2. **CAMS Chemical Transport**
+   - Create `src/plugins/transport/cams/`
+   - Integrate Copernicus atmospheric data
+   - Download 3D chemical transport fields
+
+3. **Industrial Emissions (CEMS)**
+   - Create `src/plugins/cems/`
+   - Research and implement data sources for China/India
+   - Real-time stack monitoring data
+
+4. **Urban Form Analysis**
+   - Create `src/plugins/urban/`
+   - Calculate street canyon effects
+   - Use OpenStreetMap building data
+
+**Required Libraries**:
+```bash
+pip install elevation>=1.1.3 rasterio>=1.3.0 richdem>=2.3.0 scikit-image>=0.19 cdsapi>=0.6.1 osmnx>=1.6.0
+```
+
+---
+
+### Worker 2: Transport & Remote Sensing
+**Focus**: Transboundary transport, trajectories, and satellite data
+
+**Tasks**:
+1. **Upwind Monitoring System** [CRITICAL]
+   - Create `src/plugins/transport/upwind/`
+   - Identify and monitor stations 500-1500km upwind
+   - Implement lag correlation analysis
+
+2. **HYSPLIT Trajectory Analysis**
+   - Create `src/plugins/transport/hysplit/`
+   - Implement 96-hour backward trajectories
+   - Add trajectory clustering for source identification
+
+3. **Sentinel-5P Satellite Integration**
+   - Create `src/plugins/sentinel5p/`
+   - Set up Google Earth Engine access
+   - Download daily NO2, SO2, CO data
+
+4. **Natural Dust Sources**
+   - Create `src/plugins/dust/`
+   - Integrate dust storm forecasts
+   - Implement early warning system
+
+**Required Libraries**:
+```bash
+pip install hytraj>=0.1.0 pysplit>=0.3.5 earthengine-api>=0.1 xarray>=2023.0 netCDF4>=1.6.0
+```
+
+---
+
+### Coordination Requirements
+
+**Shared Updates**:
+- Domain models (coordinate on new model definitions)
+- API key management (CDS for Worker 1, GEE for Worker 2)
+- Data storage paths (follow existing conventions)
+
+**Integration Points**:
+- Terrain effects + Transport predictions
+- Fire emissions + Trajectory analysis
+- All features → ML pipeline
+
+**Success Metrics**:
+- All critical tasks completed first
+- Clean plugin architecture maintained
+- R² improvement from ~0.70 to ~0.90
