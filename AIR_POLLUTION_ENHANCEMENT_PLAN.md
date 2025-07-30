@@ -290,11 +290,6 @@ This comprehensive enhancement plan transforms the air quality monitoring system
    - Calculate street canyon effects
    - Use OpenStreetMap building data
 
-**Required Libraries**:
-```bash
-pip install elevation>=1.1.3 rasterio>=1.3.0 richdem>=2.3.0 scikit-image>=0.19 cdsapi>=0.6.1 osmnx>=1.6.0
-```
-
 ---
 
 ### Worker 2: Transport & Remote Sensing
@@ -320,27 +315,3 @@ pip install elevation>=1.1.3 rasterio>=1.3.0 richdem>=2.3.0 scikit-image>=0.19 c
    - Create `src/plugins/dust/`
    - Integrate dust storm forecasts
    - Implement early warning system
-
-**Required Libraries**:
-```bash
-pip install hytraj>=0.1.0 pysplit>=0.3.5 earthengine-api>=0.1 xarray>=2023.0 netCDF4>=1.6.0
-```
-
----
-
-### Coordination Requirements
-
-**Shared Updates**:
-- Domain models (coordinate on new model definitions)
-- API key management (CDS for Worker 1, GEE for Worker 2)
-- Data storage paths (follow existing conventions)
-
-**Integration Points**:
-- Terrain effects + Transport predictions
-- Fire emissions + Trajectory analysis
-- All features → ML pipeline
-
-**Success Metrics**:
-- All critical tasks completed first
-- Clean plugin architecture maintained
-- R² improvement from ~0.70 to ~0.90
