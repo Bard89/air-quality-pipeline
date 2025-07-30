@@ -26,6 +26,9 @@ python scripts/download_fire_data.py --country JP --days 7
 
 # ERA5 PBL height
 python scripts/download_era5_pbl.py --country JP --start 2024-01-01 --end 2024-01-07
+
+# Elevation grid
+python scripts/download_elevation_grid.py --country JP
 ```
 
 ## Data Sources
@@ -41,12 +44,12 @@ python scripts/download_era5_pbl.py --country JP --start 2024-01-01 --end 2024-0
 | **Traffic** (JARTIC) | ✓ Yes | 5 min | 2019-present |
 | **Fire Detection** (FIRMS) | ✓ Yes | 3 hours** | Last 2 months |
 | **Atmospheric** (ERA5 PBL) | ✗ No | 5 days | 1940-present |
+| **Elevation Grid** | ✗ No | One-time | Static elevation |
 
 ### Planned Enhancements
 | Source | Real-time | Latency | Coverage |
 |--------|-----------|---------|----------|
 | **Upwind Monitoring** | ✓ Yes | 1-3 hours | Via OpenAQ |
-| **Terrain Analysis** | ✗ No | Static | One-time calculation |
 | **HYSPLIT Trajectories** | ✓ Yes | 6 hours | 96-hour backward |
 | **CAMS Chemical Transport** | ✗ No | 3-5 days | 2003-present |
 | **Sentinel-5P Satellite** | ✗ No | 3-5 days | 2018-present |
@@ -65,10 +68,10 @@ python scripts/download_era5_pbl.py --country JP --start 2024-01-01 --end 2024-0
 - [Traffic](docs/TRAFFIC.md)
 - [Fire Detection](docs/FIRE_DETECTION.md)
 - [ERA5 PBL Height](docs/ERA5_PBL.md)
+- [Elevation Grid](docs/ELEVATION.md)
 
 ### Planned Documentation
 - Upwind Transport Monitoring Guide
-- Terrain Analysis Guide
 - HYSPLIT Trajectory Guide
 - CAMS Chemical Transport Guide
 - Sentinel-5P Satellite Guide
@@ -99,7 +102,7 @@ python scripts/download_era5_pbl.py --country JP --start 2024-01-01 --end 2024-0
 **CAMS Chemical Transport**: Fills gaps between ground stations with modeled pollution fields. Captures pollution plumes missed by sparse monitors.
 
 ### Local Amplification (Planned)
-**Terrain Analysis**: Valleys trap pollution like bowls. Cities in basins (Tokyo, Seoul) see 2-5x higher concentrations than flat areas.
+**Terrain Analysis**: Valleys trap pollution like bowls. Cities in basins (Kyoto, Seoul) see 2-5x higher concentrations than flat areas.
 
 **Urban Form**: Street canyons trap vehicle emissions. Building height/density affects local wind patterns and pollution hotspots.
 
