@@ -82,10 +82,10 @@ python scripts/download_elevation_grid.py --country JP
 ## Why These Data Sources?
 
 ### Air Quality Foundation
-**OpenAQ**: Ground truth PM2.5/NO2/O3 measurements from official monitoring stations. Essential baseline but sparse coverage (cities only).
+**OpenAQ**: Ground truth PM2.5/NO2/O3 ... measurements from monitoring stations. Essential baseline but sometimes sparse coverage. Mostly cities and hige differences in data quantity and quality between countiries. Good coverage in Asia for Korea, Japan and India. China missing. 
 
 ### Meteorological Drivers
-**Weather (Open-Meteo, NASA POWER, JMA)**: Wind disperses pollution, rain washes it out, temperature drives chemical reactions. Weather explains 40-60% of pollution variability.
+**Weather (Open-Meteo, NASA POWER, JMA)**: Wind disperses pollution, rain washes it out, temperature drives chemical reactions. Weather explains maybe 40-60% of pollution variability.
 
 **ERA5 PBL Height**: The "ceiling" that traps pollution. Low PBL (<500m) can increase ground-level pollution 2-5x. Critical for predicting morning rush hour peaks.
 
