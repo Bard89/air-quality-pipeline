@@ -82,33 +82,35 @@ python scripts/download_elevation_grid.py --country JP
 ## Why These Data Sources?
 
 ### Air Quality Foundation
-**OpenAQ**: Ground truth PM2.5/NO2/O3 ... measurements from monitoring stations. Essential baseline but sometimes sparse coverage. Mostly cities and hige differences in data quantity and quality between countiries. Good coverage in Asia for Korea, Japan and India. China missing. 
+**OpenAQ**: Ground truth measurements of PM2.5 (particulate matter <2.5μm), NO2 (nitrogen dioxide), O3 (ozone), SO2 (sulfur dioxide), and CO (carbon monoxide) from official monitoring stations.
 
 ### Meteorological Drivers
-**Weather (Open-Meteo, NASA POWER, JMA)**: Wind disperses pollution, rain washes it out, temperature drives chemical reactions. Weather explains maybe 40-60% of pollution variability.
+**Weather (Open-Meteo, NASA POWER, JMA)**: Temperature, humidity, wind speed/direction, precipitation, and pressure data that control pollution dispersion and chemical reactions. NASA POWER = Prediction of Worldwide Energy Resources, JMA = Japan Meteorological Agency.
 
-**ERA5 PBL Height**: The "ceiling" that traps pollution. Low PBL (<500m) can increase ground-level pollution 2-5x. Critical for predicting morning rush hour peaks.
+**ERA5 PBL Height**: Planetary Boundary Layer height from ECMWF Reanalysis v5 (ERA5) - the atmospheric "ceiling" that determines how high pollutants can mix vertically (lower = more concentrated pollution).
 
 ### Emission Sources
-**Fire Detection (FIRMS)**: Wildfires/agricultural burning can spike PM2.5 10x within hours. Real-time alerts prevent missing sudden pollution events.
+**Fire Detection (FIRMS)**: Fire Information for Resource Management System - real-time satellite detection of active fires with Fire Radiative Power (FRP) measuring heat output intensity in megawatts.
 
-**Traffic (JARTIC)**: Rush hour emissions trapped by morning inversions. Traffic volume directly correlates with NO2/PM2.5 in urban areas.
+**Traffic (JARTIC)**: Japan Road Traffic Information Center - congestion data showing vehicle density and speeds on major highways and urban roads.
+
+**Elevation Grid**: Ground elevation data in meters above sea level used to identify valleys, mountains, and terrain features that affect air flow.
 
 ### Transport & Dispersion (Planned)
-**Upwind Monitoring**: 50-70% of pollution is transboundary. Tracking upwind cities provides 24-48hr advance warning of incoming pollution.
+**Upwind Monitoring**: Tracking pollution levels at locations upwind from target areas to predict incoming air mass quality.
 
-**HYSPLIT Trajectories**: Identifies where pollution came from. Essential for attribution and predicting which regions will be affected.
+**HYSPLIT Trajectories**: Hybrid Single-Particle Lagrangian Integrated Trajectory model - backward air parcel trajectories showing where air masses originated from over the past 48-96 hours.
 
-**CAMS Chemical Transport**: Fills gaps between ground stations with modeled pollution fields. Captures pollution plumes missed by sparse monitors.
+**CAMS Chemical Transport**: Copernicus Atmosphere Monitoring Service - European model providing gridded estimates of atmospheric composition including aerosols and reactive gases.
 
 ### Local Amplification (Planned)
-**Terrain Analysis**: Valleys trap pollution like bowls. Cities in basins (Kyoto, Seoul) see 2-5x higher concentrations than flat areas.
+**Terrain Analysis**: Calculating Terrain Ruggedness Index (TRI), valley depth, and sky view factor to identify pollution-trapping topography.
 
-**Urban Form**: Street canyons trap vehicle emissions. Building height/density affects local wind patterns and pollution hotspots.
+**Urban Form**: Building height, street width ratios, and urban density metrics that create street canyon effects and modify local wind patterns.
 
 ### Enhanced Coverage (Planned)
-**Sentinel-5P Satellite**: Daily NO2/SO2 maps reveal pollution between ground stations. Identifies industrial emissions and ship tracks.
+**Sentinel-5P Satellite**: Daily satellite measurements of NO2 (nitrogen dioxide), SO2 (sulfur dioxide), CO (carbon monoxide), CH4 (methane), and aerosol optical depth at 5.5km resolution.
 
-**Industrial Emissions (CEMS)**: Real-time stack monitoring from major polluters. Direct emission rates improve model accuracy near industrial zones.
+**Industrial Emissions (CEMS)**: Continuous Emission Monitoring System data from industrial stacks showing real-time SO2 (sulfur dioxide), NOx (nitrogen oxides), and PM (particulate matter) emissions.
 
-**Natural Sources**: Dust storms add massive PM. Advance warning prevents misattribution of natural vs anthropogenic pollution.
+**Natural Sources**: Dust storm forecasts and volcanic ash advisories tracking natural particulate matter sources.
