@@ -31,6 +31,75 @@ python scripts/download_era5_pbl.py --country JP --start 2024-01-01 --end 2024-0
 python scripts/download_elevation_grid.py --country JP
 ```
 
+## External Data Management
+
+This project uses a centralized data storage system that references data from `../Project-Data/data/`. All downloaded data is stored there for sharing across multiple analysis projects.
+
+### Reading Data
+
+```python
+from src.utils.data_reader import DataReader
+from datetime import datetime
+
+reader = DataReader()
+
+# Read air quality data
+df_air = reader.read_openaq(
+    country='JP',
+    parameters=['pm25', 'pm10']
+)
+
+# Read weather data
+df_weather = reader.read_weather(
+    source='openmeteo',
+    country='JP', 
+    start_date=datetime(2023, 1, 1),
+    end_date=datetime(2023, 12, 31)
+)
+
+# Read elevation data
+df_elevation = reader.read_elevation('JP')
+
+# Read fire detection data
+df_fires = reader.read_fires('IN')
+```
+
+### Data Catalog
+
+View available data files:
+
+```bash
+# Show summary of all data sources
+python scripts/data_catalog.py --summary
+
+# List files for specific source
+python scripts/data_catalog.py --source openaq
+
+# Filter by country
+python scripts/data_catalog.py --country JP
+
+# Export catalog to CSV
+python scripts/data_catalog.py --export catalog.csv
+```
+
+### Storage Configuration
+
+When downloading new data, it automatically saves to `../Project-Data/data/`:
+
+```python
+from src.infrastructure.external_storage import ExternalDataStorage
+from datetime import datetime
+
+storage = ExternalDataStorage(
+    source='openaq',
+    country='JP',
+    data_type='airquality',
+    start_date=datetime(2025, 1, 1),
+    end_date=datetime(2025, 1, 31)
+)
+# Files will be saved to: ../Project-Data/data/openaq/processed/
+```
+
 ## Data Sources
 
 ### Implemented
