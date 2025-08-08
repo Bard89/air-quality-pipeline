@@ -55,17 +55,40 @@ class FIRMSProcessor(BaseProcessor):
         
         df = self.standardize_timestamps(df)
         
+        # Pivot from long to wide format if needed
+        if 'parameter' in df.columns and 'value' in df.columns:
+            # Data is in long format, pivot it
+            pivot_df = df.pivot_table(
+                index=['timestamp', 'latitude', 'longitude', 'satellite', 'fire_id', 'intensity_class', 'scan_area_km2'],
+                columns='parameter',
+                values='value',
+                aggfunc='first'
+            ).reset_index()
+            df = pivot_df
+        
         df = self.add_h3_index(df)
         h3_col = f'h3_index_res{self.H3_RESOLUTION_FINE}'
         
-        aggregated = df.groupby(['timestamp', h3_col]).agg({
-            'fire_radiative_power': ['count', 'sum', 'max', 'mean'],
-            'fire_brightness': 'max',
-            'fire_confidence': 'mean',
-            'scan_area_km2': 'mean',
+        # Check which columns are available
+        available_cols = df.columns.tolist()
+        agg_dict = {
+            'timestamp': 'first',
             f'h3_lat_res{self.H3_RESOLUTION_FINE}': 'first',
             f'h3_lon_res{self.H3_RESOLUTION_FINE}': 'first'
-        }).reset_index()
+        }
+        
+        if 'fire_radiative_power' in available_cols:
+            agg_dict['fire_radiative_power'] = ['count', 'sum', 'max', 'mean']
+        if 'fire_brightness' in available_cols:
+            agg_dict['fire_brightness'] = 'max'
+        if 'fire_confidence' in available_cols:
+            agg_dict['fire_confidence'] = 'mean'
+        if 'scan_area_km2' in available_cols:
+            agg_dict['scan_area_km2'] = 'mean'
+        if 'fire_id' in available_cols:
+            agg_dict['fire_id'] = 'count'
+        
+        aggregated = df.groupby(['timestamp', h3_col]).agg(agg_dict).reset_index()
         
         aggregated.columns = ['_'.join(col).strip() if col[1] else col[0] 
                              for col in aggregated.columns.values]

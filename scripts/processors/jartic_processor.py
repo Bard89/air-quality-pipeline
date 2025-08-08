@@ -19,8 +19,24 @@ def process_chunk_parallel(chunk_data: Tuple[int, pd.DataFrame], H3_RESOLUTION_F
     chunk_num, chunk = chunk_data
     
     try:
-        chunk['timestamp'] = pd.to_datetime(chunk['timestamp'], format='%Y/%m/%d %H:%M')
+        chunk['timestamp'] = pd.to_datetime(chunk['timestamp'], format='%Y/%m/%d %H:%M', errors='coerce')
+        
+        # Remove invalid timestamps
+        chunk = chunk.dropna(subset=['timestamp'])
+        if chunk.empty:
+            return pd.DataFrame()
+            
         chunk['timestamp'] = chunk['timestamp'].dt.tz_localize('Asia/Tokyo').dt.tz_convert('UTC')
+        
+        # Ensure numeric columns are actually numeric
+        chunk['traffic_volume'] = pd.to_numeric(chunk['traffic_volume'], errors='coerce')
+        chunk['distance'] = pd.to_numeric(chunk['distance'], errors='coerce')
+        chunk['link_number'] = pd.to_numeric(chunk['link_number'], errors='coerce')
+        
+        # Drop rows where traffic_volume couldn't be converted to numeric
+        chunk = chunk.dropna(subset=['traffic_volume'])
+        if chunk.empty:
+            return pd.DataFrame()
         
         # Vectorized mesh code conversion
         mesh_codes = chunk['mesh_code'].astype(str).values
@@ -49,7 +65,7 @@ def process_chunk_parallel(chunk_data: Tuple[int, pd.DataFrame], H3_RESOLUTION_F
         
         h3_col = f'h3_index_res{H3_RESOLUTION_FINE}'
         
-        # Aggregate to hexagon-hour
+        # Aggregate to hexagon-hour - with explicit handling of numeric columns
         aggregated = chunk.groupby(['timestamp_hour', h3_col]).agg({
             'traffic_volume': ['mean', 'max', 'std', 'count'],
             'distance': 'mean',
@@ -94,6 +110,13 @@ def process_chunk_parallel(chunk_data: Tuple[int, pd.DataFrame], H3_RESOLUTION_F
         
     except Exception as e:
         logger.error(f"Error in parallel chunk {chunk_num}: {e}")
+        # Try to provide more debugging info
+        try:
+            logger.debug(f"Chunk columns: {chunk.columns.tolist()}")
+            logger.debug(f"Chunk dtypes: {chunk.dtypes.to_dict()}")
+            logger.debug(f"First few rows: {chunk.head(2).to_dict()}")
+        except:
+            pass
         return pd.DataFrame()
 
 class JARTICProcessor(BaseProcessor):
