@@ -18,8 +18,13 @@ python scripts/download_air_quality.py --country JP --max-locations 10 --paralle
 # Weather  
 python scripts/download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
 
-# Traffic
+# Traffic - Download archives
 python scripts/download_jartic_archives.py --start 2024-01 --end 2024-12
+
+# Traffic - Process downloaded archives (memory-safe parallel processing)
+python scripts/process_jartic_parallel.py --archive jartic_typeB_2023_01.zip
+python scripts/process_jartic_parallel.py --archive jartic_typeB_2023_01.zip --workers 2  # Safer for low-memory systems
+python scripts/process_jartic_parallel.py --archive jartic_typeB_2023_01.zip --sample
 
 # Fire detection
 python scripts/download_fire_data.py --country JP --days 7
@@ -29,6 +34,88 @@ python scripts/download_era5_pbl.py --country JP --start 2024-01-01 --end 2024-0
 
 # Elevation grid
 python scripts/download_elevation_grid.py --country JP
+
+# HYSPLIT backward trajectories
+python scripts/download_hysplit_trajectories.py \
+    --country JP \
+    --start 2024-01-01 \
+    --end 2024-01-07 \
+    --altitude 500 \
+    --duration -96 \
+    --frequency 24
+
+# Sentinel-5P satellite data (requires registration)
+# Register at: https://s5phub.copernicus.eu/dhus
+python scripts/download_sentinel5p.py \
+    --product NO2 \
+    --country JP \
+    --start 2024-01-01 \
+    --end 2024-01-07 \
+    --username YOUR_USERNAME \
+    --password YOUR_PASSWORD
+```
+
+## Advanced Data Processing
+
+### Processing JARTIC Traffic Archives
+```bash
+# Memory-safe parallel processing (4GB archives, ~50M records each)
+python scripts/process_jartic_parallel.py --archive jartic_typeB_2023_01.zip
+
+# Custom worker count (default: CPU cores / 2, max 4)
+python scripts/process_jartic_parallel.py --archive jartic_typeB_2023_01.zip --workers 2  # Recommended for 8GB RAM
+python scripts/process_jartic_parallel.py --archive jartic_typeB_2023_01.zip --workers 1  # Safe mode for low memory
+
+# Sample data without processing
+python scripts/process_jartic_parallel.py --archive jartic_typeB_2023_01.zip --sample
+
+# Features:
+# - Memory-safe batch processing of 51 prefectures
+# - Real-time progress: "Processing: 75.0% (38/51) | ETA: 5m 23s"
+# - Automatic memory management with garbage collection
+# - Record limiting to prevent memory exhaustion
+# - Single file handle to avoid system resource leaks
+# - Outputs standardized CSV with traffic volumes per location
+```
+
+### HYSPLIT Trajectory Analysis
+```bash
+# Download backward trajectories for major cities
+python scripts/download_hysplit_trajectories.py \
+    --country JP \
+    --start 2024-01-01 \
+    --end 2024-01-31 \
+    --altitude 500 \      # Starting altitude in meters
+    --duration -96 \      # 96 hours backward
+    --frequency 24        # Daily trajectories
+
+# Available countries: JP, IN, KR
+# Trajectories saved as both JSON and CSV
+```
+
+### Sentinel-5P Satellite Data
+```python
+# Using the Python API
+from src.plugins.sentinel5p.datasource import Sentinel5PDownloader
+from datetime import datetime
+
+downloader = Sentinel5PDownloader(
+    username='your_username',  # Register at https://s5phub.copernicus.eu/dhus
+    password='your_password'
+)
+
+# Search for NO2 products over Japan
+products = downloader.search_products(
+    product_type='NO2',  # Options: NO2, SO2, CO, CH4, HCHO, O3, AER_AI
+    start_date=datetime(2024, 1, 1),
+    end_date=datetime(2024, 1, 7),
+    country='JP',
+    max_cloud_cover=50.0
+)
+
+# Download products
+for product in products[:5]:
+    downloader.download_product(product, output_path='../Project-Data/data/sentinel5p/raw/')
 ```
 
 ## External Data Management
@@ -115,16 +202,16 @@ storage = ExternalDataStorage(
 | **Atmospheric** (ERA5 PBL) | ✗ No | 5 days | 1940-present |
 | **Elevation Grid** | ✗ No | One-time | Static elevation |
 
-### Planned Enhancements
-| Source | Real-time | Latency | Coverage |
-|--------|-----------|---------|----------|
-| **Upwind Monitoring** | ✓ Yes | 1-3 hours | Via OpenAQ |
-| **HYSPLIT Trajectories** | ✓ Yes | 6 hours | 96-hour backward |
-| **CAMS Chemical Transport** | ✗ No | 3-5 days | 2003-present |
-| **Sentinel-5P Satellite** | ✗ No | 3-5 days | 2018-present |
-| **Industrial Emissions** (CEMS) | ✓ Yes | 1 hour | China/India |
-| **Urban Form** | ✗ No | Static | One-time analysis |
-| **Natural Sources** (Dust) | ✓ Yes | 6 hours | Forecast only |
+### Advanced Data Sources (New)
+| Source | Status | Real-time | Coverage |
+|--------|--------|-----------|----------|
+| **HYSPLIT Trajectories** | ✅ Ready | ✓ Yes | 96-hour backward trajectories |
+| **Sentinel-5P Satellite** | ✅ Ready | ✗ No | Global NO2, SO2, CO, CH4, aerosols |
+| **JARTIC Processing** | ✅ Ready | ✓ Yes | Japan traffic volume/speed/occupancy |
+| **CAMS Chemical Transport** | 🔧 Planned | ✗ No | 2003-present atmospheric composition |
+| **Industrial Emissions** (CEMS) | 🔧 Planned | ✓ Yes | China/India facility emissions |
+| **Urban Form** | 🔧 Planned | ✗ No | Building heights, street canyons |
+| **Natural Sources** (Dust) | 🔧 Planned | ✓ Yes | Asian dust and volcanic ash forecasts |
 
 *JMA: 10-min for precipitation products, hourly for other parameters
 **FIRMS: <60 seconds for US/Canada, 30 min for geostationary satellites, 3 hours global
@@ -138,15 +225,8 @@ storage = ExternalDataStorage(
 - [Fire Detection](docs/FIRE_DETECTION.md)
 - [ERA5 PBL Height](docs/ERA5_PBL.md)
 - [Elevation Grid](docs/ELEVATION.md)
-
-### Planned Documentation
-- Upwind Transport Monitoring Guide
-- HYSPLIT Trajectory Guide
-- CAMS Chemical Transport Guide
-- Sentinel-5P Satellite Guide
-- Industrial Emissions (CEMS) Guide
-- Urban Form Analysis Guide
-- Natural Sources (Dust) Guide
+- [New Data Sources Guide](docs/NEW_DATA_SOURCES.md) - HYSPLIT, Sentinel-5P, JARTIC processing
+- [ML Integration TODO](docs/ML_INTEGRATION_TODO.md)
 
 ## Why These Data Sources?
 
