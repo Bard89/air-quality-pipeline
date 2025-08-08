@@ -61,40 +61,62 @@ class ERA5DataSource(DataSource):
         limit: Optional[int] = None,
         **filters: Any
     ) -> List[Location]:
-        if country and country != "JP":
-            return []
-            
         locations = []
         
-        japan_bbox = {
-            'lat_min': 24.0,
-            'lat_max': 46.0,
-            'lon_min': 122.0,
-            'lon_max': 146.0
+        country_bboxes = {
+            'JP': {
+                'lat_min': 24.0,
+                'lat_max': 46.0,
+                'lon_min': 122.0,
+                'lon_max': 146.0
+            },
+            'IN': {
+                'lat_min': 8.0,
+                'lat_max': 37.0,
+                'lon_min': 68.0,
+                'lon_max': 97.0
+            },
+            'KR': {
+                'lat_min': 33.0,
+                'lat_max': 39.0,
+                'lon_min': 124.0,
+                'lon_max': 132.0
+            },
+            'CN': {
+                'lat_min': 18.0,
+                'lat_max': 54.0,
+                'lon_min': 73.0,
+                'lon_max': 135.0
+            }
         }
+        
+        if country and country not in country_bboxes:
+            return []
+            
+        bbox = country_bboxes.get(country, country_bboxes['JP'])
         
         grid_resolution = 0.25
         
-        lat_steps = int((japan_bbox['lat_max'] - japan_bbox['lat_min']) / grid_resolution)
-        lon_steps = int((japan_bbox['lon_max'] - japan_bbox['lon_min']) / grid_resolution)
+        lat_steps = int((bbox['lat_max'] - bbox['lat_min']) / grid_resolution)
+        lon_steps = int((bbox['lon_max'] - bbox['lon_min']) / grid_resolution)
         
         for lat_idx in range(0, lat_steps, 4):
             for lon_idx in range(0, lon_steps, 4):
                 if limit and len(locations) >= limit:
                     break
                     
-                lat = japan_bbox['lat_min'] + lat_idx * grid_resolution
-                lon = japan_bbox['lon_min'] + lon_idx * grid_resolution
+                lat = bbox['lat_min'] + lat_idx * grid_resolution
+                lon = bbox['lon_min'] + lon_idx * grid_resolution
                 
                 location = Location(
-                    id=f"ERA5_JP_{lat:.2f}N_{lon:.2f}E",
+                    id=f"ERA5_{country}_{lat:.2f}N_{lon:.2f}E",
                     name=f"ERA5 Grid {lat:.2f}°N {lon:.2f}°E",
                     coordinates=Coordinates(
                         latitude=Decimal(str(lat)),
                         longitude=Decimal(str(lon))
                     ),
                     city="",
-                    country="JP",
+                    country=country or "JP",
                     metadata={
                         'type': 'reanalysis',
                         'grid_resolution': '0.25x0.25',

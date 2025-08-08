@@ -181,8 +181,9 @@ Note: Real data requires CDS API key. Without it, demo data will be generated.
     else:
         logging.basicConfig(level=logging.WARNING)
     
-    if args.country.upper() != 'JP':
-        print("ERROR: Currently only Japan (JP) is supported for ERA5 data")
+    supported_countries = ['JP', 'IN', 'KR', 'CN']
+    if args.country.upper() not in supported_countries:
+        print(f"ERROR: Country {args.country.upper()} not supported. Supported: {', '.join(supported_countries)}")
         return
         
     if args.start > args.end:

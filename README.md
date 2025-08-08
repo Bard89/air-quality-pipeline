@@ -216,6 +216,187 @@ storage = ExternalDataStorage(
 *JMA: 10-min for precipitation products, hourly for other parameters
 **FIRMS: <60 seconds for US/Canada, 30 min for geostationary satellites, 3 hours global
 
+## Data Processing Pipeline
+
+### Overview
+The project includes a comprehensive data processing pipeline that:
+1. Processes raw data from each source into standardized formats
+2. Aggregates data using H3 hexagonal grid system (Resolution 8: ~0.5 km² hexagons)
+3. Combines all sources into a unified dataset with hourly resolution
+
+### How H3 Hexagonal Aggregation Works
+
+#### What is H3?
+H3 is a hierarchical hexagonal geospatial indexing system developed by Uber. It divides the Earth's surface into hexagonal cells at multiple resolutions, where each hexagon has a unique identifier.
+
+#### Why Hexagons Instead of Squares?
+```
+   Square Grid                    Hexagonal Grid
+   ┌───┬───┬───┐                  ⬡---⬡---⬡
+   │ A │ B │ C │                 ⬡ A ⬡ B ⬡
+   ├───┼───┼───┤                ⬡---⬡---⬡---⬡
+   │ D │ X │ E │                ⬡ C ⬡ X ⬡ D ⬡
+   ├───┼───┼───┤                 ⬡---⬡---⬡---⬡
+   │ F │ G │ H │                  ⬡ E ⬡ F ⬡
+   └───┴───┴───┘                   ⬡---⬡---⬡
+
+   Distances from X:               Distances from X:
+   - To edges: 1 unit              - To all neighbors: 1 unit
+   - To corners: 1.41 units        - Uniform distance!
+```
+
+**Advantages of Hexagons:**
+- **Uniform Distance**: All 6 neighbors are equidistant from center (vs 2 distances for squares)
+- **Better Gradients**: More accurate for interpolation and gradient calculations
+- **Isotropic**: No directional bias (squares favor cardinal directions)
+- **Natural Clustering**: Better represents circular influence zones (pollution dispersion, etc.)
+
+#### The Aggregation Process
+
+**Step 1: Assign Points to Hexagons**
+```python
+# Each lat/lon point gets mapped to a hexagon ID
+lat, lon = 35.6762, 139.6503  # Tokyo
+hex_id = h3.latlng_to_cell(lat, lon, resolution=8)
+# Result: "8844c0a31dfffff" (unique hexagon identifier)
+```
+
+**Step 2: Aggregate Within Hexagons**
+```
+Raw Data Points                 Hexagon Aggregation
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Location A: PM2.5 = 23 µg/m³    ┌─────────────────┐
+Location B: PM2.5 = 28 µg/m³ -> │ Hexagon X       │
+Location C: PM2.5 = 25 µg/m³    │ PM2.5 mean: 25.3│
+(all within same hexagon)       │ PM2.5 std: 2.5  │
+                                │ PM2.5 max: 28   │
+                                │ Count: 3        │
+                                └─────────────────┘
+```
+
+**Step 3: Temporal Aggregation**
+```
+5-minute traffic data           Hourly aggregation
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+14:00 - Speed: 60 km/h         ┌─────────────────┐
+14:05 - Speed: 55 km/h         │ Hour: 14:00     │
+14:10 - Speed: 45 km/h      -> │ Avg Speed: 52.5 │
+...                             │ Min Speed: 45   │
+14:55 - Speed: 50 km/h         │ Max Speed: 60   │
+                                └─────────────────┘
+```
+
+#### Resolution Hierarchy
+H3 supports 16 resolutions (0-15). We use Resolution 8 for fine-grained analysis:
+
+| Resolution | Avg Hexagon Area | Edge Length | Use Case |
+|------------|------------------|-------------|----------|
+| 6 | ~36.13 km² | ~6.13 km | Country-level analysis |
+| 7 | ~5.16 km² | ~2.32 km | Regional/city analysis |
+| **8** | **~0.74 km²** | **~0.88 km** | **Our default - neighborhood** |
+| 9 | ~0.11 km² | ~0.33 km | Street-level analysis |
+| 10 | ~0.015 km² | ~0.13 km | Building-level |
+
+#### Example: Processing Tokyo Air Quality Data
+
+**Input**: 1000 sensor readings across Tokyo over 24 hours
+```
+timestamp,latitude,longitude,pm25
+2023-01-01 00:00:00,35.6762,139.6503,23.5
+2023-01-01 00:00:00,35.6894,139.6917,25.2
+... (998 more rows)
+```
+
+**Processing Steps**:
+1. **Add H3 Index**: Each row gets hexagon ID based on lat/lon
+2. **Group by Hexagon & Hour**: Data grouped by (h3_index, timestamp_hour)
+3. **Aggregate Statistics**: Calculate mean, std, min, max for each group
+4. **Result**: ~50-100 hexagon-hours (depending on spatial distribution)
+
+**Output**:
+```
+timestamp,h3_index_res8,pm25_mean,pm25_std,pm25_min,pm25_max,count
+2023-01-01 00:00,8844c0a31dfffff,24.3,2.1,21.5,28.9,15
+2023-01-01 00:00,8844c0a33bfffff,22.8,1.8,20.2,25.5,12
+...
+```
+
+#### Handling Multiple Data Sources
+
+When combining different data sources with varying spatial densities:
+
+```
+OpenAQ Sensors      OpenMeteo Grid      Unified H3 Grid
+     •                  ▫ ▫ ▫            ⬡ ⬡ ⬡
+   •   •              ▫ ▫ ▫ ▫     ->    ⬡ ⬡ ⬡ ⬡
+     •                ▫ ▫ ▫ ▫            ⬡ ⬡ ⬡ ⬡
+(irregular)          (regular)          (standardized)
+```
+
+All data sources are mapped to the same H3 grid, enabling:
+- Direct spatial joins without complex distance calculations
+- Consistent resolution across all data types
+- Efficient storage and querying
+
+#### Benefits for Machine Learning
+
+The hexagonal aggregation provides:
+- **Fixed-size feature vectors**: Each hexagon-hour is one training sample
+- **Spatial context**: Neighboring hexagons can be easily identified
+- **Reduced noise**: Aggregation smooths out sensor anomalies
+- **Balanced datasets**: Regular grid prevents spatial sampling bias
+- **Efficient computation**: Hexagon IDs enable fast spatial operations
+
+### Processing Individual Sources
+
+```bash
+# Process all sources for a date range
+python scripts/process_all_sources.py --country JP --start 2023-01-01 --end 2023-01-31
+
+# Process specific sources only
+python scripts/process_all_sources.py --country JP --start 2023-01-01 --end 2023-01-31 --sources openaq openmeteo
+
+# Available sources: openaq, openmeteo, nasapower, era5, firms, jartic, terrain
+```
+
+### Creating Unified Dataset
+
+```bash
+# Create unified dataset with H3 hexagonal aggregation
+python scripts/create_unified_dataset.py --country JP --start 2023-01-01 --end 2023-01-31
+
+# Specify custom sources
+python scripts/create_unified_dataset.py --country JP --start 2023-01-01 --end 2023-01-31 --sources openaq openmeteo era5
+
+# Output location
+python scripts/create_unified_dataset.py --country JP --start 2023-01-01 --end 2023-01-31 --output unified_jp_202301.csv
+```
+
+### H3 Hexagonal Grid System
+- **Resolution 8**: ~0.5 km² hexagons (610m edge length) for fine-grained analysis
+- **Why Hexagons**: Uniform distance to all neighbors (vs 2 for squares), better for gradient analysis
+- **Hierarchical**: Can aggregate to coarser resolutions (Resolution 7: ~5 km² for regional analysis)
+
+### Output Format
+The unified dataset contains:
+- `timestamp`: Hourly UTC timestamps
+- `h3_index_res8`: H3 hexagon identifier
+- `h3_lat_res8`, `h3_lon_res8`: Hexagon center coordinates
+- **Air Quality**: pm25_ugm3, pm10_ugm3, no2_ugm3, so2_ugm3, co_ppm, o3_ugm3
+- **Weather**: temperature_c, humidity_pct, pressure_hpa, wind_speed_ms, precipitation_mm
+- **Boundary Layer**: pbl_height_meters
+- **Fire**: fire_count, total_frp_mw, max_brightness_k, distance_to_nearest_fire_km
+- **Traffic**: avg_speed_kmh, avg_congestion_level, total_vehicle_count
+- **Terrain**: elevation_m, slope_degrees, aspect_degrees
+- **Derived Features**: heat_index, pm_ratio, has_fire, traffic_index, hour, day_of_week, is_weekend
+
+### Processing Features
+- **Temporal Aggregation**: Sub-hourly data (e.g., 5-min traffic) averaged to hourly
+- **Spatial Aggregation**: All measurements within hexagon aggregated (mean, std, min, max)
+- **Missing Value Handling**: Forward fill (3h), interpolation, or mean imputation
+- **Encoding Detection**: Auto-detects UTF-8 or Shift-JIS for Japanese data
+- **Memory Optimization**: Processes in monthly chunks for large datasets
+
 ## Docs
 
 ### Available

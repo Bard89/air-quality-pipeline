@@ -59,83 +59,168 @@ class NASAPowerDataSource(DataSource):
         limit: Optional[int] = None,
         **filters: Any
     ) -> List[Location]:
-        if country and country != "JP":
-            return []
-            
         locations = []
         
-        japan_major_cities = [
-            {"name": "Tokyo", "lat": 35.6762, "lon": 139.6503},
-            {"name": "Osaka", "lat": 34.6937, "lon": 135.5023},
-            {"name": "Nagoya", "lat": 35.1815, "lon": 136.9066},
-            {"name": "Sapporo", "lat": 43.0642, "lon": 141.3469},
-            {"name": "Fukuoka", "lat": 33.5904, "lon": 130.4017},
-            {"name": "Kobe", "lat": 34.6901, "lon": 135.1955},
-            {"name": "Kyoto", "lat": 35.0116, "lon": 135.7681},
-            {"name": "Yokohama", "lat": 35.4437, "lon": 139.6380},
-            {"name": "Sendai", "lat": 38.2682, "lon": 140.8694},
-            {"name": "Hiroshima", "lat": 34.3853, "lon": 132.4553},
-            {"name": "Niigata", "lat": 37.9161, "lon": 139.0364},
-            {"name": "Naha", "lat": 26.2124, "lon": 127.6792},
-            {"name": "Kagoshima", "lat": 31.5969, "lon": 130.5571},
-            {"name": "Matsuyama", "lat": 33.8395, "lon": 132.7657},
-            {"name": "Kanazawa", "lat": 36.5944, "lon": 136.6256}
-        ]
-        
-        grid_resolution = 0.5
-        
-        for idx, city in enumerate(japan_major_cities):
-            if limit and idx >= limit:
-                break
-                
-            location = Location(
-                id=f"NASAPOWER_JP_{city['name'].upper()}",
-                name=f"NASA POWER - {city['name']}",
-                coordinates=Coordinates(
-                    latitude=Decimal(str(city['lat'])),
-                    longitude=Decimal(str(city['lon']))
-                ),
-                city=city['name'],
-                country="JP",
-                metadata={
-                    'type': 'satellite_derived',
-                    'grid_resolution': '0.5x0.5',
-                    'data_source': 'nasapower',
-                    'temporal_resolution': 'hourly',
-                    'coverage_start': '2001-01-01',
-                    'coverage_daily': '1984-01-01',
-                    'data_latency': '1-2 days',
-                    'validation': 'ground_station_calibrated'
-                }
-            )
-            locations.append(location)
+        if country == "IN":
+            import csv
+            from pathlib import Path
             
-        for lat in range(30, 45, 5):
-            for lon in range(130, 145, 5):
-                if limit and len(locations) >= limit:
+            # Use OpenAQ sensor locations for consistency
+            india_files = [
+                Path("data/openaq/processed/in_airquality_all_20250729_024256.csv"),
+                Path("data/openaq/processed/in_airquality_all_20250723_014552.csv")
+            ]
+            
+            csv_file = None
+            for f in india_files:
+                if f.exists():
+                    csv_file = f
+                    break
+                    
+            if csv_file:
+                seen_locations = {}
+                with open(csv_file, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        location_id = row['location_id']
+                        if location_id not in seen_locations:
+                            location_name = row['location_name']
+                            lat = float(row['latitude'])
+                            lon = float(row['longitude'])
+                            
+                            seen_locations[location_id] = Location(
+                                id=f"NASAPOWER_IN_{location_id}",
+                                name=f"NASA POWER - {location_name}",
+                                coordinates=Coordinates(
+                                    latitude=Decimal(str(lat)),
+                                    longitude=Decimal(str(lon))
+                                ),
+                                city=row.get('city', ''),
+                                country="IN",
+                                metadata={
+                                    'type': 'satellite_derived',
+                                    'grid_resolution': '0.5x0.5',
+                                    'data_source': 'nasapower',
+                                    'temporal_resolution': 'hourly',
+                                    'coverage_start': '2001-01-01',
+                                    'coverage_daily': '1984-01-01',
+                                    'data_latency': '1-2 days',
+                                    'validation': 'ground_station_calibrated',
+                                    'openaq_location_id': location_id
+                                }
+                            )
+                            
+                            if limit and len(seen_locations) >= limit:
+                                break
+                                
+                locations = list(seen_locations.values())
+            else:
+                # Fallback to major cities if no OpenAQ data
+                india_major_cities = [
+                    {"name": "New Delhi", "lat": 28.6139, "lon": 77.2090},
+                    {"name": "Mumbai", "lat": 19.0760, "lon": 72.8777},
+                    {"name": "Bangalore", "lat": 12.9716, "lon": 77.5946},
+                    {"name": "Kolkata", "lat": 22.5726, "lon": 88.3639},
+                    {"name": "Chennai", "lat": 13.0827, "lon": 80.2707}
+                ]
+                
+                for idx, city in enumerate(india_major_cities):
+                    if limit and idx >= limit:
+                        break
+                        
+                    location = Location(
+                        id=f"NASAPOWER_IN_{city['name'].upper().replace(' ', '_')}",
+                        name=f"NASA POWER - {city['name']}",
+                        coordinates=Coordinates(
+                            latitude=Decimal(str(city['lat'])),
+                            longitude=Decimal(str(city['lon']))
+                        ),
+                        city=city['name'],
+                        country="IN",
+                        metadata={
+                            'type': 'satellite_derived',
+                            'grid_resolution': '0.5x0.5',
+                            'data_source': 'nasapower',
+                            'temporal_resolution': 'hourly',
+                            'coverage_start': '2001-01-01',
+                            'coverage_daily': '1984-01-01',
+                            'data_latency': '1-2 days',
+                            'validation': 'ground_station_calibrated'
+                        }
+                    )
+                    locations.append(location)
+                
+        elif country == "JP":
+            japan_major_cities = [
+                {"name": "Tokyo", "lat": 35.6762, "lon": 139.6503},
+                {"name": "Osaka", "lat": 34.6937, "lon": 135.5023},
+                {"name": "Nagoya", "lat": 35.1815, "lon": 136.9066},
+                {"name": "Sapporo", "lat": 43.0642, "lon": 141.3469},
+                {"name": "Fukuoka", "lat": 33.5904, "lon": 130.4017},
+                {"name": "Kobe", "lat": 34.6901, "lon": 135.1955},
+                {"name": "Kyoto", "lat": 35.0116, "lon": 135.7681},
+                {"name": "Yokohama", "lat": 35.4437, "lon": 139.6380},
+                {"name": "Sendai", "lat": 38.2682, "lon": 140.8694},
+                {"name": "Hiroshima", "lat": 34.3853, "lon": 132.4553},
+                {"name": "Niigata", "lat": 37.9161, "lon": 139.0364},
+                {"name": "Naha", "lat": 26.2124, "lon": 127.6792},
+                {"name": "Kagoshima", "lat": 31.5969, "lon": 130.5571},
+                {"name": "Matsuyama", "lat": 33.8395, "lon": 132.7657},
+                {"name": "Kanazawa", "lat": 36.5944, "lon": 136.6256}
+            ]
+            
+            for idx, city in enumerate(japan_major_cities):
+                if limit and idx >= limit:
                     break
                     
                 location = Location(
-                    id=f"NASAPOWER_JP_GRID_{lat}N_{lon}E",
-                    name=f"NASA POWER Grid {lat}°N {lon}°E",
+                    id=f"NASAPOWER_JP_{city['name'].upper()}",
+                    name=f"NASA POWER - {city['name']}",
                     coordinates=Coordinates(
-                        latitude=Decimal(str(lat)),
-                        longitude=Decimal(str(lon))
+                        latitude=Decimal(str(city['lat'])),
+                        longitude=Decimal(str(city['lon']))
                     ),
-                    city="",
+                    city=city['name'],
                     country="JP",
                     metadata={
-                        'type': 'grid_point',
+                        'type': 'satellite_derived',
                         'grid_resolution': '0.5x0.5',
                         'data_source': 'nasapower',
                         'temporal_resolution': 'hourly',
-                        'coverage_start': '2001-01-01'
+                        'coverage_start': '2001-01-01',
+                        'coverage_daily': '1984-01-01',
+                        'data_latency': '1-2 days',
+                        'validation': 'ground_station_calibrated'
                     }
                 )
                 locations.append(location)
-            # Break outer loop if limit reached
-            if limit and len(locations) >= limit:
-                break
+            
+            for lat in range(30, 45, 5):
+                for lon in range(130, 145, 5):
+                    if limit and len(locations) >= limit:
+                        break
+                        
+                    location = Location(
+                        id=f"NASAPOWER_JP_GRID_{lat}N_{lon}E",
+                        name=f"NASA POWER Grid {lat}°N {lon}°E",
+                        coordinates=Coordinates(
+                            latitude=Decimal(str(lat)),
+                            longitude=Decimal(str(lon))
+                        ),
+                        city="",
+                        country="JP",
+                        metadata={
+                            'type': 'grid_point',
+                            'grid_resolution': '0.5x0.5',
+                            'data_source': 'nasapower',
+                            'temporal_resolution': 'hourly',
+                            'coverage_start': '2001-01-01'
+                        }
+                    )
+                    locations.append(location)
+                # Break outer loop if limit reached
+                if limit and len(locations) >= limit:
+                    break
                 
         return locations
         

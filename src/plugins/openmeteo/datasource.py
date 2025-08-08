@@ -4,6 +4,8 @@ from decimal import Decimal
 import asyncio
 import logging
 import aiohttp
+import csv
+from pathlib import Path
 
 from ...domain.interfaces import DataSource
 from ...domain.models import Location, Sensor, Measurement, Coordinates, ParameterType, MeasurementUnit
@@ -45,98 +47,142 @@ class OpenMeteoDataSource(DataSource):
         limit: Optional[int] = None,
         **filters: Any
     ) -> List[Location]:
-        if country and country != "JP":
-            return []
-            
         locations = []
         
-        japan_regions = [
-            ("Tokyo", 35.6762, 139.6503),
-            ("Osaka", 34.6937, 135.5023),
-            ("Yokohama", 35.4437, 139.6380),
-            ("Nagoya", 35.1815, 136.9066),
-            ("Sapporo", 43.0642, 141.3469),
-            ("Fukuoka", 33.5904, 130.4017),
-            ("Kobe", 34.6901, 135.1955),
-            ("Kawasaki", 35.5308, 139.7029),
-            ("Kyoto", 35.0116, 135.7681),
-            ("Saitama", 35.8617, 139.6455),
-            ("Hiroshima", 34.3853, 132.4553),
-            ("Sendai", 38.2682, 140.8694),
-            ("Chiba", 35.6074, 140.1065),
-            ("Niigata", 37.9162, 139.0364),
-            ("Hamamatsu", 34.7108, 137.7261),
-            ("Kumamoto", 32.8032, 130.7079),
-            ("Sagamihara", 35.5531, 139.3544),
-            ("Okayama", 34.6551, 133.9195),
-            ("Oita", 33.2382, 131.6126),
-            ("Kanazawa", 36.5611, 136.6565),
-            ("Nagasaki", 32.7503, 129.8779),
-            ("Toyama", 36.6959, 137.2137),
-            ("Kochi", 33.5597, 133.5311),
-            ("Takamatsu", 34.3428, 134.0435),
-            ("Akita", 39.7200, 140.1023),
-            ("Yokosuka", 35.2844, 139.6723),
-            ("Wakayama", 34.2305, 135.1708),
-            ("Gifu", 35.4237, 136.7607),
-            ("Miyazaki", 31.9077, 131.4202),
-            ("Nara", 34.6851, 135.8048)
-        ]
-        
-        for i, (city, lat, lon) in enumerate(japan_regions):
-            if limit and len(locations) >= limit:
-                break
-                
-            location = Location(
-                id=f"OPENMETEO_JP_{i:03d}",
-                name=city,
-                coordinates=Coordinates(
-                    latitude=Decimal(str(lat)),
-                    longitude=Decimal(str(lon))
-                ),
-                city=city,
-                country="JP",
-                metadata={
-                    'data_source': 'openmeteo',
-                    'type': 'forecast_api',
-                    'resolution': '0.1x0.1 degrees',
-                    'update_frequency': 'hourly'
-                }
-            )
-            locations.append(location)
+        if country == "IN":
+            india_files = [
+                Path("data/openaq/processed/in_airquality_all_20250729_024256.csv"),
+                Path("data/openaq/processed/in_airquality_all_20250723_014552.csv")
+            ]
             
-        lat_range = range(24, 46, 1)
-        lon_range = range(123, 146, 1)
-        grid_locations = []
-        
-        for lat in lat_range:
-            for lon in lon_range:
-                if 24 <= lat <= 46 and 123 <= lon <= 146:
-                    grid_id = f"OPENMETEO_GRID_{lat}N_{lon}E"
-                    grid_name = f"Grid {lat}°N {lon}°E"
+            csv_file = None
+            for f in india_files:
+                if f.exists():
+                    csv_file = f
+                    break
                     
-                    location = Location(
-                        id=grid_id,
-                        name=grid_name,
-                        coordinates=Coordinates(
-                            latitude=Decimal(str(lat)),
-                            longitude=Decimal(str(lon))
-                        ),
-                        city="",
-                        country="JP",
-                        metadata={
-                            'data_source': 'openmeteo',
-                            'type': 'gridded',
-                            'resolution': '0.1x0.1 degrees'
-                        }
-                    )
-                    grid_locations.append(location)
+            if csv_file:
+                seen_locations = {}
+                with open(csv_file, 'r', encoding='utf-8') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        location_id = row['location_id']
+                        if location_id not in seen_locations:
+                            location_name = row['location_name']
+                            lat = float(row['latitude'])
+                            lon = float(row['longitude'])
+                            
+                            seen_locations[location_id] = Location(
+                                id=f"OPENMETEO_IN_{location_id}",
+                                name=location_name,
+                                coordinates=Coordinates(
+                                    latitude=Decimal(str(lat)),
+                                    longitude=Decimal(str(lon))
+                                ),
+                                city=row.get('city', ''),
+                                country="IN",
+                                metadata={
+                                    'data_source': 'openmeteo',
+                                    'type': 'weather_station',
+                                    'resolution': '0.1x0.1 degrees',
+                                    'update_frequency': 'hourly',
+                                    'openaq_location_id': location_id
+                                }
+                            )
+                            
+                            if limit and len(seen_locations) >= limit:
+                                break
+                                
+                locations = list(seen_locations.values())
+                
+        elif country == "JP":
+            japan_regions = [
+                ("Tokyo", 35.6762, 139.6503),
+                ("Osaka", 34.6937, 135.5023),
+                ("Yokohama", 35.4437, 139.6380),
+                ("Nagoya", 35.1815, 136.9066),
+                ("Sapporo", 43.0642, 141.3469),
+                ("Fukuoka", 33.5904, 130.4017),
+                ("Kobe", 34.6901, 135.1955),
+                ("Kawasaki", 35.5308, 139.7029),
+                ("Kyoto", 35.0116, 135.7681),
+                ("Saitama", 35.8617, 139.6455),
+                ("Hiroshima", 34.3853, 132.4553),
+                ("Sendai", 38.2682, 140.8694),
+                ("Chiba", 35.6074, 140.1065),
+                ("Niigata", 37.9162, 139.0364),
+                ("Hamamatsu", 34.7108, 137.7261),
+                ("Kumamoto", 32.8032, 130.7079),
+                ("Sagamihara", 35.5531, 139.3544),
+                ("Okayama", 34.6551, 133.9195),
+                ("Oita", 33.2382, 131.6126),
+                ("Kanazawa", 36.5611, 136.6565),
+                ("Nagasaki", 32.7503, 129.8779),
+                ("Toyama", 36.6959, 137.2137),
+                ("Kochi", 33.5597, 133.5311),
+                ("Takamatsu", 34.3428, 134.0435),
+                ("Akita", 39.7200, 140.1023),
+                ("Yokosuka", 35.2844, 139.6723),
+                ("Wakayama", 34.2305, 135.1708),
+                ("Gifu", 35.4237, 136.7607),
+                ("Miyazaki", 31.9077, 131.4202),
+                ("Nara", 34.6851, 135.8048)
+            ]
+            
+            for i, (city, lat, lon) in enumerate(japan_regions):
+                if limit and len(locations) >= limit:
+                    break
                     
-        if limit:
-            remaining = limit - len(locations)
-            locations.extend(grid_locations[:remaining])
-        else:
-            locations.extend(grid_locations)
+                location = Location(
+                    id=f"OPENMETEO_JP_{i:03d}",
+                    name=city,
+                    coordinates=Coordinates(
+                        latitude=Decimal(str(lat)),
+                        longitude=Decimal(str(lon))
+                    ),
+                    city=city,
+                    country="JP",
+                    metadata={
+                        'data_source': 'openmeteo',
+                        'type': 'forecast_api',
+                        'resolution': '0.1x0.1 degrees',
+                        'update_frequency': 'hourly'
+                    }
+                )
+                locations.append(location)
+            
+            lat_range = range(24, 46, 1)
+            lon_range = range(123, 146, 1)
+            grid_locations = []
+            
+            for lat in lat_range:
+                for lon in lon_range:
+                    if 24 <= lat <= 46 and 123 <= lon <= 146:
+                        grid_id = f"OPENMETEO_GRID_{lat}N_{lon}E"
+                        grid_name = f"Grid {lat}°N {lon}°E"
+                        
+                        location = Location(
+                            id=grid_id,
+                            name=grid_name,
+                            coordinates=Coordinates(
+                                latitude=Decimal(str(lat)),
+                                longitude=Decimal(str(lon))
+                            ),
+                            city="",
+                            country="JP",
+                            metadata={
+                                'data_source': 'openmeteo',
+                                'type': 'gridded',
+                                'resolution': '0.1x0.1 degrees'
+                            }
+                        )
+                        grid_locations.append(location)
+                        
+            if limit:
+                remaining = limit - len(locations)
+                locations.extend(grid_locations[:remaining])
+            else:
+                locations.extend(grid_locations)
             
         return locations
         
