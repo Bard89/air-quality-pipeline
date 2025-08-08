@@ -27,7 +27,7 @@ class DataReader:
             df = df[df['datetime'] >= start_date]
         if end_date:
             df = df[df['datetime'] <= end_date]
-        if parameters:
+        if parameters and 'parameter' in df.columns:
             df = df[df['parameter'].isin(parameters)]
         
         return df
@@ -68,7 +68,7 @@ class DataReader:
         result = result[(result[date_col] >= start_date) & 
                        (result[date_col] <= end_date)]
         
-        if parameters:
+        if parameters and 'parameter' in result.columns:
             result = result[result['parameter'].isin(parameters)]
         
         return result

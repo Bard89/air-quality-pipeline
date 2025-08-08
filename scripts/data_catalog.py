@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-import sys
 from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent))
 
 from datetime import datetime
 import pandas as pd
-from typing import Dict, List, Optional
+from typing import Dict, List
 import argparse
 from tabulate import tabulate
 from src.infrastructure.data_reference import ExternalDataManager
@@ -26,28 +24,59 @@ def get_file_info(file_path: Path) -> Dict:
         info['country'] = parts[0].upper()
     
     if 'weather' in file_path.name or 'airquality' in file_path.name:
-        try:
-            if '_to_' in file_path.name:
-                date_parts = file_path.stem.split('_')
-                for i, part in enumerate(date_parts):
-                    if part == 'to' and i > 0 and i < len(date_parts) - 1:
-                        info['start_date'] = datetime.strptime(date_parts[i-1], '%Y%m%d').strftime('%Y-%m-%d')
-                        info['end_date'] = datetime.strptime(date_parts[i+1], '%Y%m%d').strftime('%Y-%m-%d')
-                        break
-        except (ValueError, IndexError):
-            pass
+        if '_to_' in file_path.name:
+            date_parts = file_path.stem.split('_')
+            for i, part in enumerate(date_parts):
+                if part == 'to' and i > 0 and i < len(date_parts) - 1:
+                    try:
+                        prev_part = date_parts[i-1]
+                        next_part = date_parts[i+1]
+                        if len(prev_part) == 8 and prev_part.isdigit():
+                            info['start_date'] = datetime.strptime(prev_part, '%Y%m%d').strftime('%Y-%m-%d')
+                        if len(next_part) == 8 and next_part.isdigit():
+                            info['end_date'] = datetime.strptime(next_part, '%Y%m%d').strftime('%Y-%m-%d')
+                    except (ValueError, IndexError) as e:
+                        import logging
+                        logging.debug(f"Failed to parse dates from {file_path.name}: {e}")
+                    break
     
     if file_path.suffix == '.csv':
         try:
-            df = pd.read_csv(file_path, nrows=5)
-            info['rows'] = len(pd.read_csv(file_path))
-            info['columns'] = len(df.columns)
+            row_count = 0
+            columns = None
+            date_col = None
+            min_date = None
+            max_date = None
             
-            if 'datetime' in df.columns or 'timestamp' in df.columns:
-                date_col = 'datetime' if 'datetime' in df.columns else 'timestamp'
-                df_full = pd.read_csv(file_path, usecols=[date_col], parse_dates=[date_col])
-                info['data_start'] = df_full[date_col].min()
-                info['data_end'] = df_full[date_col].max()
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for i, line in enumerate(f):
+                    if i == 0:
+                        header = line.strip().split(',')
+                        columns = len(header)
+                        if 'datetime' in header:
+                            date_col = header.index('datetime')
+                        elif 'timestamp' in header:
+                            date_col = header.index('timestamp')
+                    else:
+                        row_count += 1
+                        if date_col is not None and i < 1000:
+                            cols = line.strip().split(',')
+                            if date_col < len(cols):
+                                try:
+                                    date_val = pd.to_datetime(cols[date_col])
+                                    if min_date is None or date_val < min_date:
+                                        min_date = date_val
+                                    if max_date is None or date_val > max_date:
+                                        max_date = date_val
+                                except:
+                                    pass
+            
+            info['rows'] = row_count
+            info['columns'] = columns
+            if min_date:
+                info['data_start'] = min_date
+            if max_date:
+                info['data_end'] = max_date
         except Exception:
             pass
     
@@ -143,13 +172,24 @@ def main():
         display_cols = [c for c in display_cols if c in df.columns]
         
         print("\n=== Available Data Files ===")
-        print(tabulate(df[display_cols].head(50), 
-                      headers='keys', 
-                      tablefmt='grid',
-                      showindex=False))
         
-        if len(df) > 50:
-            print(f"\n... and {len(df) - 50} more files")
+        page_size = 20
+        total_pages = (len(df) + page_size - 1) // page_size
+        
+        for page in range(total_pages):
+            start_idx = page * page_size
+            end_idx = min((page + 1) * page_size, len(df))
+            
+            print(f"\nPage {page + 1}/{total_pages} (showing {start_idx + 1}-{end_idx} of {len(df)})")
+            print(tabulate(df[display_cols].iloc[start_idx:end_idx], 
+                          headers='keys', 
+                          tablefmt='grid',
+                          showindex=False))
+            
+            if page < total_pages - 1:
+                user_input = input("\nPress Enter for next page, 'q' to quit: ")
+                if user_input.lower() == 'q':
+                    break
     
     if args.export:
         df = pd.DataFrame(all_data)
