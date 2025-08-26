@@ -17,14 +17,18 @@ logging.basicConfig(
 )
 
 def process_jartic_full(start_date: datetime, end_date: datetime, max_rows: Optional[int] = None, 
-                        n_workers: Optional[int] = None, input_file: Optional[str] = None):
-    processor = JARTICProcessor(country='JP', max_rows=max_rows, n_workers=n_workers, input_file=input_file)
+                        n_workers: Optional[int] = None, input_file: Optional[str] = None,
+                        custom_data_dir: Optional[str] = None):
+    processor = JARTICProcessor(country='JP', max_rows=max_rows, n_workers=n_workers, 
+                                input_file=input_file, custom_data_dir=custom_data_dir)
     print(f"Using parallel processing with {processor.n_workers} workers")
     
     output_suffix = f'_sample_{max_rows//1000000}M' if max_rows else '_full'
     output_path = Path(f'data/processed/jp_jartic_processed_{start_date.strftime("%Y%m%d")}_to_{end_date.strftime("%Y%m%d")}{output_suffix}.csv')
     
     print(f"Processing JARTIC data for {start_date.date()} to {end_date.date()}")
+    if custom_data_dir:
+        print(f"Using custom data directory: {custom_data_dir}")
     if input_file:
         print(f"Input file: {input_file}")
     if max_rows:
@@ -90,6 +94,8 @@ Examples:
                        help='Number of parallel workers (default: auto-detect)')
     parser.add_argument('--input-file', '-i', type=str, default=None,
                        help='Specific input CSV file to process (overrides date-based selection)')
+    parser.add_argument('--data-dir', '-d', type=str, default=None,
+                       help='Custom data directory path (e.g., external SSD path)')
     
     args = parser.parse_args()
     
@@ -97,7 +103,8 @@ Examples:
     end_date = datetime.strptime(args.end, '%Y-%m-%d')
     
     process_jartic_full(start_date, end_date, args.max_rows, 
-                       n_workers=args.workers, input_file=args.input_file)
+                       n_workers=args.workers, input_file=args.input_file,
+                       custom_data_dir=args.data_dir)
 
 if __name__ == "__main__":
     main()

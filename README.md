@@ -26,6 +26,12 @@ python scripts/process_jartic_parallel.py --archive jartic_typeB_2023_01.zip
 python scripts/process_jartic_parallel.py --archive jartic_typeB_2023_01.zip --workers 2  # Safer for low-memory systems
 python scripts/process_jartic_parallel.py --archive jartic_typeB_2023_01.zip --sample
 
+# Traffic - Process from external SSD (for large datasets)
+python scripts/process_jartic_full.py \
+  --start 2023-06-01 \
+  --end 2025-06-30 \
+  --data-dir "/Volumes/Extreme SSD/LeWagon Data 2025 Bootcamp Data. backup/backup 30 07 2025"
+
 # Fire detection
 python scripts/download_fire_data.py --country JP --days 7
 
@@ -69,12 +75,19 @@ python scripts/process_jartic_parallel.py --archive jartic_typeB_2023_01.zip --w
 # Sample data without processing
 python scripts/process_jartic_parallel.py --archive jartic_typeB_2023_01.zip --sample
 
+# Process from external SSD (when local disk space is limited)
+python scripts/process_jartic_full.py \
+  --start 2023-06-01 \
+  --end 2025-06-30 \
+  --data-dir "/Volumes/Extreme SSD/path/to/data"
+
 # Features:
 # - Memory-safe batch processing of 51 prefectures
 # - Real-time progress: "Processing: 75.0% (38/51) | ETA: 5m 23s"
 # - Automatic memory management with garbage collection
 # - Record limiting to prevent memory exhaustion
 # - Single file handle to avoid system resource leaks
+# - External SSD support for processing large datasets without copying
 # - Outputs standardized CSV with traffic volumes per location
 ```
 
