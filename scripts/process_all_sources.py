@@ -19,6 +19,7 @@ from scripts.processors import (
     JARTICProcessor,
     TerrainProcessor
 )
+from scripts.processors.cams_processor import CAMSProcessor
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,7 +34,8 @@ PROCESSOR_CLASSES = {
     'era5': ERA5Processor,
     'firms': FIRMSProcessor,
     'jartic': JARTICProcessor,
-    'terrain': TerrainProcessor
+    'terrain': TerrainProcessor,
+    'cams': CAMSProcessor
 }
 
 def process_source(
