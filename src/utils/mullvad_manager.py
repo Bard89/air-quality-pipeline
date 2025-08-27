@@ -14,34 +14,57 @@ logger = logging.getLogger(__name__)
 
 class MullvadManager:
     def __init__(self):
-        # Country codes for Mullvad servers
+        # All Mullvad country codes (48 countries as of 2024)
         self.servers = [
-            "us",  # United States
-            "gb",  # United Kingdom  
-            "ca",  # Canada
-            "de",  # Germany
-            "fr",  # France
-            "nl",  # Netherlands
-            "ch",  # Switzerland
-            "se",  # Sweden
-            "no",  # Norway
-            "dk",  # Denmark
-            "fi",  # Finland
-            "pl",  # Poland
-            "es",  # Spain
-            "it",  # Italy
+            "al",  # Albania
             "at",  # Austria
-            "be",  # Belgium
-            "cz",  # Czech Republic
-            "ro",  # Romania
-            "gr",  # Greece
-            "pt",  # Portugal
-            "ie",  # Ireland
             "au",  # Australia
-            "nz",  # New Zealand
-            "jp",  # Japan
-            "sg",  # Singapore
+            "be",  # Belgium
+            "bg",  # Bulgaria
+            "br",  # Brazil
+            "ca",  # Canada
+            "ch",  # Switzerland
+            "cl",  # Chile
+            "co",  # Colombia
+            "cy",  # Cyprus
+            "cz",  # Czech Republic
+            "de",  # Germany
+            "dk",  # Denmark
+            "ee",  # Estonia
+            "es",  # Spain
+            "fi",  # Finland
+            "fr",  # France
+            "gb",  # United Kingdom
+            "gr",  # Greece
             "hk",  # Hong Kong
+            "hr",  # Croatia
+            "hu",  # Hungary
+            "id",  # Indonesia
+            "ie",  # Ireland
+            "il",  # Israel
+            "it",  # Italy
+            "jp",  # Japan
+            "mx",  # Mexico
+            "my",  # Malaysia
+            "ng",  # Nigeria
+            "nl",  # Netherlands
+            "no",  # Norway
+            "nz",  # New Zealand
+            "pe",  # Peru
+            "ph",  # Philippines
+            "pl",  # Poland
+            "pt",  # Portugal
+            "ro",  # Romania
+            "rs",  # Serbia
+            "se",  # Sweden
+            "sg",  # Singapore
+            "si",  # Slovenia
+            "sk",  # Slovakia
+            "th",  # Thailand
+            "tr",  # Turkey
+            "ua",  # Ukraine
+            "us",  # United States
+            "za",  # South Africa
         ]
         
         self.exhausted_servers: Set[str] = set()
@@ -50,6 +73,7 @@ class MullvadManager:
         self.max_attempts_per_server = 3
         self.cooldown_minutes = 65
         self.current_server: Optional[str] = None
+        self.previous_server: Optional[str] = None  # Track last used server
         
         # Check if mullvad is installed
         self.check_installation()
@@ -134,6 +158,10 @@ class MullvadManager:
         try:
             logger.info("Disconnecting from Mullvad...")
             
+            # Remember the server we're disconnecting from
+            if self.current_server:
+                self.previous_server = self.current_server
+            
             result = subprocess.run(
                 ['mullvad', 'disconnect'],
                 capture_output=True,
@@ -209,6 +237,10 @@ class MullvadManager:
             # Skip exhausted servers
             if server in self.exhausted_servers:
                 continue
+            
+            # Skip the currently connected server
+            if server == self.current_server:
+                continue
                 
             # Check cooldown
             if server in self.server_last_used:
@@ -225,13 +257,19 @@ class MullvadManager:
         
         if not available_servers:
             logger.error("All VPN servers exhausted!")
+            logger.info(f"Exhausted servers: {len(self.exhausted_servers)}/{len(self.servers)}")
+            logger.info(f"Servers on cooldown: {len(self.server_last_used)}")
             return None
         
         # Randomize server selection to avoid patterns
+        # But ensure we don't pick the same server we just disconnected from
+        if self.previous_server in available_servers and len(available_servers) > 1:
+            available_servers.remove(self.previous_server)
+            
         next_server = random.choice(available_servers)
         
         logger.info(f"Switching to server: {next_server}")
-        logger.info(f"Available servers remaining: {len(available_servers)}")
+        logger.info(f"Available servers: {len(available_servers)}/{len(self.servers)}")
         
         # Disconnect first if connected
         if self.is_connected():

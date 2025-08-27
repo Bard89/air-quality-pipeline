@@ -41,6 +41,7 @@ class OpenMeteoMullvadDownloader:
         self.current_process = None
         self.checkpoint_file = Path('data/openmeteo/checkpoint_mullvad.json')
         self.completed_months = set()
+        self.month_progress = {}  # Track progress within each month
         self.current_month = None
         
     def load_checkpoint(self):
@@ -48,17 +49,21 @@ class OpenMeteoMullvadDownloader:
             with open(self.checkpoint_file, 'r') as f:
                 data = json.load(f)
                 self.completed_months = set(data.get('completed_months', []))
+                self.month_progress = data.get('month_progress', {})
                 logger.info(f"Loaded checkpoint: {len(self.completed_months)} months completed")
+                if self.month_progress:
+                    logger.info(f"Partial progress: {self.month_progress}")
     
     def save_checkpoint(self):
         self.checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
         with open(self.checkpoint_file, 'w') as f:
             json.dump({
                 'completed_months': list(self.completed_months),
+                'month_progress': self.month_progress,
                 'last_update': datetime.now().isoformat()
             }, f, indent=2)
     
-    def download_month(self, month_str: str) -> bool:
+    def download_month(self, month_str: str, resume_from: Optional[int] = None) -> tuple[bool, Optional[int]]:
         # Parse month string (e.g., "2024-06")
         year, month = month_str.split('-')
         
@@ -82,7 +87,13 @@ class OpenMeteoMullvadDownloader:
             '--end', end_date
         ]
         
+        # Add resume parameter if we need to resume
+        if resume_from is not None:
+            cmd.extend(['--resume-from', str(resume_from)])
+        
         logger.info(f"Starting download for {month_str}")
+        if resume_from:
+            logger.info(f"Resuming from location {resume_from}")
         logger.info(f"Command: {' '.join(cmd)}")
         
         try:
@@ -98,6 +109,7 @@ class OpenMeteoMullvadDownloader:
             self.current_process = process
             rate_limit_hit = False
             last_progress = None
+            last_location_index = resume_from or 0
             
             for line in process.stdout:
                 print(f"  {line.rstrip()}")
@@ -106,6 +118,10 @@ class OpenMeteoMullvadDownloader:
                 if self.rate_limit_pattern.search(line):
                     logger.warning(f"Rate limit detected: {line.strip()}")
                     rate_limit_hit = True
+                    # Extract current progress before killing
+                    progress_match = self.progress_pattern.search(line)
+                    if progress_match:
+                        last_location_index = int(progress_match.group(1))
                     process.terminate()
                     break
                 
@@ -113,6 +129,7 @@ class OpenMeteoMullvadDownloader:
                 progress_match = self.progress_pattern.search(line)
                 if progress_match:
                     last_progress = f"{progress_match.group(1)}/{progress_match.group(2)}"
+                    last_location_index = int(progress_match.group(1))
                 
                 # Check for completion
                 if self.completed_pattern.search(line):
@@ -121,22 +138,28 @@ class OpenMeteoMullvadDownloader:
             return_code = process.wait(timeout=10) if not rate_limit_hit else -1
             
             if rate_limit_hit:
-                return False  # Need VPN switch
+                # Save progress for this month
+                self.month_progress[month_str] = last_location_index
+                self.save_checkpoint()
+                return False, last_location_index  # Need VPN switch, return progress
             elif return_code == 0:
                 self.completed_months.add(month_str)
+                # Clear progress for completed month
+                if month_str in self.month_progress:
+                    del self.month_progress[month_str]
                 self.save_checkpoint()
-                return True
+                return True, None
             else:
                 logger.error(f"Download failed with return code: {return_code}")
-                return False
+                return False, last_location_index
                 
         except subprocess.TimeoutExpired:
             logger.error("Process timeout")
             process.kill()
-            return False
+            return False, last_location_index
         except Exception as e:
             logger.error(f"Error during download: {e}")
-            return False
+            return False, last_location_index
         finally:
             self.current_process = None
     
@@ -199,6 +222,11 @@ class OpenMeteoMullvadDownloader:
             logger.info(f"Processing month: {month}")
             logger.info(f"Progress: {len(self.completed_months)}/{len(months) + len(self.completed_months)} months")
             
+            # Check if we have partial progress for this month
+            resume_from = self.month_progress.get(month)
+            if resume_from:
+                logger.info(f"Resuming from location {resume_from}")
+            
             attempts = 0
             max_attempts = len(self.vpn_manager.servers) if self.vpn_enabled else 1
             
@@ -218,13 +246,18 @@ class OpenMeteoMullvadDownloader:
                     logger.info(f"New IP: {self.vpn_manager.get_current_ip()}")
                     time.sleep(5)  # Wait for connection to stabilize
                 
-                # Try download
-                success = self.download_month(month)
+                # Try download with resume support
+                success, last_progress = self.download_month(month, resume_from=resume_from)
                 
                 if success:
                     logger.info(f"✓ Successfully downloaded {month}")
                     break
                 else:
+                    # Update resume point for next attempt
+                    if last_progress:
+                        resume_from = last_progress
+                        logger.info(f"Will resume from location {resume_from} on next attempt")
+                    
                     if not self.vpn_enabled:
                         logger.error(f"✗ Failed to download {month} (VPN switching disabled)")
                         break
