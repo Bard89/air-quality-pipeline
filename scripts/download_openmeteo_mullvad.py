@@ -34,9 +34,9 @@ class OpenMeteoMullvadDownloader:
             # Use custom server list if provided (country codes)
             self.vpn_manager.servers = servers
         
-        self.rate_limit_pattern = re.compile(r'(429|rate.*limit|Too Many Requests)', re.IGNORECASE)
+        self.rate_limit_pattern = re.compile(r'(Rate limit hit!|HTTP.*429|429.*Too Many|Too Many Requests)', re.IGNORECASE)
         self.progress_pattern = re.compile(r'Processing.*?(\d+)/(\d+)')
-        self.completed_pattern = re.compile(r'(Successfully saved|Download complete)', re.IGNORECASE)
+        self.completed_pattern = re.compile(r'Download complete!', re.IGNORECASE)
         
         self.current_process = None
         self.checkpoint_file = Path('data/openmeteo/checkpoint_mullvad.json')
