@@ -105,8 +105,12 @@ def process_prefecture_data(pref_data_tuple):
         return pref_zip_name, None, 0
 
 
-def process_archive_parallel(archive_path: Path, num_workers: int = None):
-    manager = ExternalDataManager()
+def process_archive_parallel(archive_path: Path, num_workers: int = None, custom_data_dir: str = None):
+    if custom_data_dir:
+        custom_path = Path(custom_data_dir) / 'data' if not custom_data_dir.endswith('/data') else Path(custom_data_dir)
+        manager = ExternalDataManager(external_data_path=custom_path)
+    else:
+        manager = ExternalDataManager()
     processed_path = manager.external_data_path / 'jartic' / 'processed'
     processed_path.mkdir(parents=True, exist_ok=True)
     
@@ -290,10 +294,16 @@ def main():
                        help='Number of parallel workers (default: auto-detect)')
     parser.add_argument('--sample', action='store_true',
                        help='Show sample data without processing')
+    parser.add_argument('--data-dir', '-d', type=str, default=None,
+                       help='Custom data directory path (e.g., external SSD path)')
     
     args = parser.parse_args()
     
-    manager = ExternalDataManager()
+    if args.data_dir:
+        custom_path = Path(args.data_dir) / 'data' if not args.data_dir.endswith('/data') else Path(args.data_dir)
+        manager = ExternalDataManager(external_data_path=custom_path)
+    else:
+        manager = ExternalDataManager()
     
     archive_path = Path(args.archive)
     if not archive_path.exists():
@@ -308,7 +318,7 @@ def main():
         return 0
     
     try:
-        records = process_archive_parallel(archive_path, args.workers)
+        records = process_archive_parallel(archive_path, args.workers, custom_data_dir=args.data_dir)
         return 0 if records > 0 else 1
         
     except Exception as e:
