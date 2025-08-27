@@ -35,6 +35,13 @@ python scripts/download_era5_pbl.py --country JP --start 2024-01-01 --end 2024-0
 # Elevation grid
 python scripts/download_elevation_grid.py --country JP
 
+# CAMS PM2.5 gridded data
+# Register at: https://ads.atmosphere.copernicus.eu/
+# Add credentials to .env: CAMS_API_KEY=your-api-key
+python scripts/download_cams_pm25.py --start 2024-01-01 --end 2024-01-31
+python scripts/download_cams_pm25.py --start 2024-01-01 --end 2024-01-31 --locations Tokyo Osaka
+python scripts/download_cams_pm25.py --start 2024-01-01 --end 2024-01-31 --parameters pm25 pm10 no2
+
 # HYSPLIT backward trajectories
 python scripts/download_hysplit_trajectories.py \
     --country JP \
@@ -76,6 +83,25 @@ python scripts/process_jartic_parallel.py --archive jartic_typeB_2023_01.zip --s
 # - Record limiting to prevent memory exhaustion
 # - Single file handle to avoid system resource leaks
 # - Outputs standardized CSV with traffic volumes per location
+```
+
+### Processing CAMS Data
+```bash
+# Convert NetCDF files to CSV with H3 aggregation
+python scripts/process_cams_to_csv.py --start 2024-01-01 --end 2024-01-31
+
+# Process single NetCDF file
+python scripts/process_cams_to_csv.py --input data/cams/raw/cams_eac4_20240101.nc
+
+# Process without H3 aggregation (keep raw grid)
+python scripts/process_cams_to_csv.py --start 2024-01-01 --end 2024-01-31 --no-aggregate
+
+# Features:
+# - Converts CAMS NetCDF to CSV format
+# - H3 hexagonal aggregation (Resolution 8)
+# - Automatic unit conversion (kg/m³ to µg/m³)
+# - WHO guideline exceedance statistics
+# - Supports PM2.5, PM10, NO2, SO2, CO, O3
 ```
 
 ### HYSPLIT Trajectory Analysis
@@ -205,10 +231,10 @@ storage = ExternalDataStorage(
 ### Advanced Data Sources (New)
 | Source | Status | Real-time | Coverage |
 |--------|--------|-----------|----------|
+| **CAMS PM2.5** | ✅ Ready | ✓ Yes* | Gridded PM2.5/PM10, 5-day forecasts |
 | **HYSPLIT Trajectories** | ✅ Ready | ✓ Yes | 96-hour backward trajectories |
 | **Sentinel-5P Satellite** | ✅ Ready | ✗ No | Global NO2, SO2, CO, CH4, aerosols |
 | **JARTIC Processing** | ✅ Ready | ✓ Yes | Japan traffic volume/speed/occupancy |
-| **CAMS Chemical Transport** | 🔧 Planned | ✗ No | 2003-present atmospheric composition |
 | **Industrial Emissions** (CEMS) | 🔧 Planned | ✓ Yes | China/India facility emissions |
 | **Urban Form** | 🔧 Planned | ✗ No | Building heights, street canyons |
 | **Natural Sources** (Dust) | 🔧 Planned | ✓ Yes | Asian dust and volcanic ash forecasts |
@@ -354,9 +380,9 @@ The hexagonal aggregation provides:
 python scripts/process_all_sources.py --country JP --start 2023-01-01 --end 2023-01-31
 
 # Process specific sources only
-python scripts/process_all_sources.py --country JP --start 2023-01-01 --end 2023-01-31 --sources openaq openmeteo
+python scripts/process_all_sources.py --country JP --start 2023-01-01 --end 2023-01-31 --sources openaq openmeteo cams
 
-# Available sources: openaq, openmeteo, nasapower, era5, firms, jartic, terrain
+# Available sources: openaq, openmeteo, nasapower, era5, firms, jartic, terrain, cams
 ```
 
 ### Creating Unified Dataset
@@ -406,6 +432,7 @@ The unified dataset contains:
 - [Fire Detection](docs/FIRE_DETECTION.md)
 - [ERA5 PBL Height](docs/ERA5_PBL.md)
 - [Elevation Grid](docs/ELEVATION.md)
+- [CAMS PM2.5](docs/CAMS_PM25.md) - Gridded PM2.5 data with forecasts
 - [New Data Sources Guide](docs/NEW_DATA_SOURCES.md) - HYSPLIT, Sentinel-5P, JARTIC processing
 - [ML Integration TODO](docs/ML_INTEGRATION_TODO.md)
 
@@ -426,12 +453,10 @@ The unified dataset contains:
 
 **Elevation Grid**: Ground elevation data in meters above sea level used to identify valleys, mountains, and terrain features that affect air flow.
 
-### Transport & Dispersion (Planned)
-**Upwind Monitoring**: Tracking pollution levels at locations upwind from target areas to predict incoming air mass quality.
+### Transport & Dispersion
+**CAMS PM2.5**: Copernicus Atmosphere Monitoring Service - Gridded PM2.5, PM10, and atmospheric composition data with 3-hourly reanalysis and 5-day forecasts. Coverage: 24-46°N, 123-146°E matching OpenMeteo grid.
 
 **HYSPLIT Trajectories**: Hybrid Single-Particle Lagrangian Integrated Trajectory model - backward air parcel trajectories showing where air masses originated from over the past 48-96 hours.
-
-**CAMS Chemical Transport**: Copernicus Atmosphere Monitoring Service - European model providing gridded estimates of atmospheric composition including aerosols and reactive gases.
 
 ### Local Amplification (Planned)
 **Terrain Analysis**: Calculating Terrain Ruggedness Index (TRI), valley depth, and sky view factor to identify pollution-trapping topography.
