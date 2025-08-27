@@ -257,7 +257,21 @@ class OpenMeteoDataSource(DataSource):
                 
                 async with session.get(url, params=params) as response:
                     if response.status != 200:
+                        error_text = await response.text()
+                        retry_after = response.headers.get('Retry-After', 'unknown')
+                        rate_limit_remaining = response.headers.get('X-RateLimit-Remaining', 'unknown')
+                        rate_limit_reset = response.headers.get('X-RateLimit-Reset', 'unknown')
+                        
                         logger.error(f"Open-Meteo API error: {response.status}")
+                        logger.error(f"  Location: {sensor.location.name} ({sensor.location.coordinates.latitude}, {sensor.location.coordinates.longitude})")
+                        logger.error(f"  Date range: {current_start.date()} to {chunk_end.date()}")
+                        logger.error(f"  Error message: {error_text[:200]}")
+                        
+                        if response.status == 429:
+                            logger.error(f"  Rate limit hit! Retry-After: {retry_after}")
+                            logger.error(f"  Remaining requests: {rate_limit_remaining}")
+                            logger.error(f"  Reset time: {rate_limit_reset}")
+                            
                         current_start = chunk_end + timedelta(days=1)
                         continue
                         
