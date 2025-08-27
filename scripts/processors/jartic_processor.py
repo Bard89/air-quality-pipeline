@@ -123,12 +123,14 @@ class JARTICProcessor(BaseProcessor):
     
     def __init__(self, country: str = 'JP', data_dir: Optional[Path] = None, 
                  max_rows: Optional[int] = None, n_workers: Optional[int] = None,
-                 input_file: Optional[str] = None, enable_checkpoints: bool = True):
+                 input_file: Optional[str] = None, enable_checkpoints: bool = True,
+                 custom_data_dir: Optional[str] = None):
         super().__init__(country, data_dir)
         self.max_rows = max_rows
         self.n_workers = n_workers or min(mp.cpu_count() - 1, 8)
         self.input_file = input_file  # Allow specifying specific input file
         self.enable_checkpoints = enable_checkpoints
+        self.custom_data_dir = Path(custom_data_dir) if custom_data_dir else None
         self.checkpoint_dir = self.processed_dir / 'checkpoints'
         if self.enable_checkpoints:
             self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -157,8 +159,11 @@ class JARTICProcessor(BaseProcessor):
                 logger.error(f"Specified input file not found: {input_path}")
                 return []
         
-        # Otherwise, look for files in the standard location
-        jartic_dir = self.data_dir / 'jartic' / 'processed'
+        # Otherwise, look for files in the standard location or custom location
+        if self.custom_data_dir:
+            jartic_dir = self.custom_data_dir / 'data' / 'jartic' / 'processed'
+        else:
+            jartic_dir = self.data_dir / 'jartic' / 'processed'
         
         if not jartic_dir.exists():
             logger.warning(f"JARTIC processed directory not found: {jartic_dir}")
