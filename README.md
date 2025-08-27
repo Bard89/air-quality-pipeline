@@ -18,7 +18,7 @@ python scripts/download_air_quality.py --country JP --max-locations 10 --paralle
 # Weather  
 python scripts/download_weather_incremental.py --source openmeteo --country JP --start 2024-01-01 --end 2024-01-31
 
-# Weather - Batch download multiple months with rate limiting (Apr-Dec 2024, 65min between downloads)
+# Weather - Batch download multiple months with rate limiting (Jun-Dec 2024, 90min between downloads)
 python scripts/download_openmeteo_2024_2025.py
 
 # Traffic - Download archives

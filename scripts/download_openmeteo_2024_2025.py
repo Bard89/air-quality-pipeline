@@ -6,11 +6,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 def download_openmeteo_with_rate_limit():
-    WAIT_TIME_SECONDS = 3900  # 1 hour and 5 minutes (65 minutes)
+    WAIT_TIME_SECONDS = 5400  # 90 minutes
     
     months_to_download = [
-        ("2024-04-01", "2024-04-30", "April 2024"),
-        ("2024-05-01", "2024-05-31", "May 2024"),
         ("2024-06-01", "2024-06-30", "June 2024"),
         ("2024-07-01", "2024-07-31", "July 2024"),
         ("2024-08-01", "2024-08-31", "August 2024"),
