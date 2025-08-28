@@ -47,18 +47,26 @@ WEATHER_PARAMETERS = {
 class IncrementalCSVWriter:
     """Thread-safe CSV writer that writes data incrementally"""
     
-    def __init__(self, output_file: Path, headers: List[str]):
+    def __init__(self, output_file: Path, headers: List[str], append_mode: bool = False):
         self.output_file = output_file
         self.headers = headers
         self.lock = Lock()
         self.measurement_count = 0
+        self.append_mode = append_mode
         self._initialize_file()
         
     def _initialize_file(self):
-        """Write headers to file"""
-        with open(self.output_file, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=self.headers)
-            writer.writeheader()
+        """Write headers to file or count existing rows if appending"""
+        if self.append_mode and self.output_file.exists():
+            # Count existing rows
+            with open(self.output_file, 'r', encoding='utf-8') as f:
+                self.measurement_count = sum(1 for line in f) - 1  # Subtract header
+            logger.info(f"Appending to existing file with {self.measurement_count} rows")
+        else:
+            # Write headers to new file
+            with open(self.output_file, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=self.headers)
+                writer.writeheader()
     
     def write_batch(self, rows: List[Dict[str, Any]]):
         """Write a batch of rows to file with thread safety"""
@@ -162,7 +170,8 @@ async def download_weather_data_incremental(
     max_locations: Optional[int] = None,
     max_concurrent: int = 5,
     analyze: bool = True,
-    output_dir: Optional[Path] = None
+    output_dir: Optional[Path] = None,
+    resume_from: Optional[int] = None
 ) -> Optional[Path]:
     """Download weather data with incremental writing to avoid memory issues"""
     registry = get_registry()
@@ -207,13 +216,14 @@ async def download_weather_data_incremental(
         
         output_file = output_dir / filename
         
-        # Setup CSV writer
+        # Setup CSV writer with append mode if resuming
         headers = [
             'timestamp', 'value', 'sensor_id', 'location_id', 'location_name',
             'latitude', 'longitude', 'parameter', 'unit', 'city', 'country',
             'data_source', 'level', 'quality_flag'
         ]
-        csv_writer = IncrementalCSVWriter(output_file, headers)
+        append_mode = resume_from is not None and output_file.exists()
+        csv_writer = IncrementalCSVWriter(output_file, headers, append_mode=append_mode)
         
         # Create semaphore to limit concurrent requests
         semaphore = asyncio.Semaphore(max_concurrent)
@@ -241,6 +251,14 @@ async def download_weather_data_incremental(
         start_time = time.time()
         tasks = []
         
+        # Handle resume logic
+        start_index = 0
+        if resume_from is not None:
+            start_index = resume_from
+            logger.info(f"Resuming from location index {start_index}")
+            # Skip already processed locations
+            locations = locations[start_index:]
+        
         for i, location in enumerate(locations):
             # Use round-robin to distribute locations across datasource instances
             ds = datasources[i % len(datasources)]
@@ -253,8 +271,10 @@ async def download_weather_data_incremental(
         location_counts = []
         
         if TQDM_AVAILABLE:
-            with tqdm(total=len(tasks), desc="Downloading locations", unit="loc") as pbar:
-                for name, task in tasks:
+            # Adjust progress bar to show overall progress including skipped locations
+            total_locations = len(locations) + start_index
+            with tqdm(total=total_locations, initial=start_index, desc="Downloading locations", unit="loc") as pbar:
+                for i, (name, task) in enumerate(tasks):
                     pbar.set_description(f"Processing {name[:20]}")
                     try:
                         count = await task
@@ -266,7 +286,8 @@ async def download_weather_data_incremental(
                     pbar.update(1)
         else:
             for i, (name, task) in enumerate(tasks):
-                logger.info(f"Processing location {i+1}/{len(tasks)}: {name}")
+                actual_index = i + start_index + 1
+                logger.info(f"Processing location {actual_index}/{len(locations) + start_index}: {name}")
                 try:
                     count = await task
                     location_counts.append(count)
@@ -335,6 +356,8 @@ async def main():
                         help="Maximum concurrent requests (default: 5)")
     parser.add_argument("--no-analyze", action="store_true",
                         help="Skip dataset analysis after download")
+    parser.add_argument("--resume-from", type=int,
+                        help="Resume download from specific location index")
     
     args = parser.parse_args()
     
@@ -352,7 +375,8 @@ async def main():
             end_date=args.end,
             max_locations=args.max_locations,
             max_concurrent=args.max_concurrent,
-            analyze=not args.no_analyze
+            analyze=not args.no_analyze,
+            resume_from=args.resume_from
         )
     except KeyboardInterrupt:
         logger.info("\nDownload interrupted by user")

@@ -24,6 +24,12 @@ python scripts/download_openmeteo_batch.py
 # Weather - Custom date range with rate limiting
 python scripts/download_openmeteo_batch.py --start 2024-01 --end 2024-03 --wait 60
 
+# Weather - With automatic VPN switching on rate limits (requires Mullvad VPN)
+# Install: brew install --cask mullvad-vpn
+# Login: mullvad account login [account-number]
+python scripts/download_openmeteo_mullvad.py --start 2024-06 --end 2024-12
+
+
 # Traffic - Download archives
 python scripts/download_jartic_archives.py --start 2024-01 --end 2024-12
 
