@@ -158,3 +158,109 @@ class FireEvent:
     brightness_temperature: Decimal
     scan_area: Optional[Decimal] = None  # Area of fire pixel in km²
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class TransportEvent:
+    """Detected pollution transport event between upwind and downwind stations."""
+    upwind_station_id: int
+    downwind_station_id: int
+    parameter: str
+    event_start: datetime
+    event_peak: datetime
+    event_end: datetime
+    upwind_peak_value: float
+    downwind_peak_value: float
+    lag_hours: int
+    transport_efficiency: float  # Ratio of downwind to upwind concentration change
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        # Validate datetime ordering
+        if self.event_start > self.event_peak:
+            raise ValueError(f"Event start ({self.event_start}) must be before or equal to peak ({self.event_peak})")
+        if self.event_peak > self.event_end:
+            raise ValueError(f"Event peak ({self.event_peak}) must be before or equal to end ({self.event_end})")
+        
+        # Validate numeric fields
+        if self.lag_hours < 0:
+            raise ValueError(f"Lag hours must be non-negative, got {self.lag_hours}")
+        if self.upwind_peak_value < 0:
+            raise ValueError(f"Upwind peak value must be non-negative, got {self.upwind_peak_value}")
+        if self.downwind_peak_value < 0:
+            raise ValueError(f"Downwind peak value must be non-negative, got {self.downwind_peak_value}")
+        if not 0 <= self.transport_efficiency <= 5:  # Allow up to 5x amplification
+            raise ValueError(f"Transport efficiency must be between 0 and 5, got {self.transport_efficiency}")
+
+
+@dataclass(frozen=True)
+class LagCorrelation:
+    """Results of lag correlation analysis between stations."""
+    upwind_station_id: int
+    downwind_station_id: int
+    parameter: str
+    lag_hours: int
+    correlation: float
+    p_value: float
+    sample_size: int
+    time_range_start: datetime
+    time_range_end: datetime
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        # Validate correlation coefficient
+        if not -1 <= self.correlation <= 1:
+            raise ValueError(f"Correlation must be between -1 and 1, got {self.correlation}")
+        
+        # Validate p-value
+        if not 0 <= self.p_value <= 1:
+            raise ValueError(f"P-value must be between 0 and 1, got {self.p_value}")
+        
+        # Validate lag hours
+        if self.lag_hours < 0:
+            raise ValueError(f"Lag hours must be non-negative, got {self.lag_hours}")
+        
+        # Validate sample size
+        if self.sample_size <= 0:
+            raise ValueError(f"Sample size must be positive, got {self.sample_size}")
+        
+        # Validate time range
+        if self.time_range_start > self.time_range_end:
+            raise ValueError(f"Start time ({self.time_range_start}) must be before end time ({self.time_range_end})")
+
+
+@dataclass(frozen=True)
+class UpwindStation:
+    """Upwind monitoring station with transport metadata."""
+    sensor_id: int
+    location_id: int
+    location_name: str
+    city: str
+    country: str
+    latitude: float
+    longitude: float
+    parameter: str
+    distance_km: float
+    bearing_degrees: float
+    is_upwind: bool
+    lag_hours: int
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        # Validate geographic coordinates
+        if not -90 <= self.latitude <= 90:
+            raise ValueError(f"Latitude must be between -90 and 90, got {self.latitude}")
+        if not -180 <= self.longitude <= 180:
+            raise ValueError(f"Longitude must be between -180 and 180, got {self.longitude}")
+        
+        # Validate distance
+        if self.distance_km < 0:
+            raise ValueError(f"Distance must be non-negative, got {self.distance_km}")
+        
+        # Validate bearing
+        if not 0 <= self.bearing_degrees <= 360:
+            raise ValueError(f"Bearing must be between 0 and 360 degrees, got {self.bearing_degrees}")
+        
+        # Validate lag hours
+        if self.lag_hours < 0:
+            raise ValueError(f"Lag hours must be non-negative, got {self.lag_hours}")
