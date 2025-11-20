@@ -73,7 +73,7 @@ class OpenMeteoProcessor(BaseProcessor):
         )
         
         pivot_df = df.pivot_table(
-            index=['timestamp', 'location_id', 'location_name', 'latitude', 'longitude', 'city', 'country'],
+            index=['timestamp', 'location_id', 'location_name', 'latitude', 'longitude', 'country'],
             columns='parameter',
             values='value',
             aggfunc='mean'
